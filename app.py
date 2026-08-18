@@ -11,7 +11,7 @@ from streamlit_js_eval import get_geolocation
 from fpdf import FPDF
 
 st.set_page_config(
-    page_title="Bharat All-in-One Hyperlocal Network",
+    page_title="Bharat All-in-One Hyperlocal Platform",
     page_icon="🛍️",
     layout="wide"
 )
@@ -19,7 +19,7 @@ st.set_page_config(
 DB_NAME = "hyperlocal_market.db"
 
 # -----------------------------------------------------------
-# 1. DATABASE SCHEMA & INITIALIZATION
+# 1. DATABASE SETUP
 # -----------------------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -34,6 +34,7 @@ def init_db():
             upi_id TEXT DEFAULT 'merchant@upi',
             city TEXT NOT NULL,
             address TEXT,
+            gstin TEXT DEFAULT 'NON-GST',
             lat REAL NOT NULL,
             lon REAL NOT NULL,
             rating REAL DEFAULT 4.8,
@@ -60,6 +61,17 @@ def init_db():
         )
     ''')
 
+    # Coupons Table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS coupons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            discount_pct REAL DEFAULT 10.0,
+            min_order_value REAL DEFAULT 200.0,
+            is_active INTEGER DEFAULT 1
+        )
+    ''')
+
     # Orders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
@@ -67,8 +79,9 @@ def init_db():
             customer_name TEXT,
             customer_phone TEXT,
             vendor_id INTEGER,
-            product_id INTEGER,
+            items_summary TEXT,
             item_price REAL,
+            discount_amount REAL DEFAULT 0.0,
             delivery_fee REAL,
             grand_total REAL,
             platform_commission_1pct REAL,
@@ -79,7 +92,7 @@ def init_db():
         )
     ''')
 
-    # Messages / In-App Inquiries Table
+    # In-App Chat
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +103,7 @@ def init_db():
         )
     ''')
 
-    # Payout Settlement Requests Table
+    # Payout Settlement Requests
     c.execute('''
         CREATE TABLE IF NOT EXISTS settlements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,10 +119,10 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
-            INSERT INTO vendors (name, phone, upi_id, city, address, lat, lon, rating, wallet_balance, free_delivery_above_500, base_1km, base_2km, per_km_extra)
+            INSERT INTO vendors (name, phone, upi_id, city, address, gstin, lat, lon, rating, wallet_balance, free_delivery_above_500, base_1km, base_2km, per_km_extra)
             VALUES 
-            ('Nagpur Central Mart', '919876543210', 'bharatmart@upi', 'Nagpur', 'Sitabuldi Main Market', 21.1458, 79.0882, 4.9, 1500.0, 1, 20.0, 30.0, 10.0),
-            ('Dharampeth Auto & Electronic World', '919876543211', 'dharampethhub@upi', 'Nagpur', 'West High Court Road', 21.1400, 79.0600, 4.7, 49500.0, 0, 20.0, 30.0, 10.0)
+            ('Nagpur Central Mart', '919876543210', 'bharatmart@upi', 'Nagpur', 'Sitabuldi Main Market', '27ABCDE1234F1Z5', 21.1458, 79.0882, 4.9, 1500.0, 1, 20.0, 30.0, 10.0),
+            ('Dharampeth Auto & Electronic World', '919876543211', 'dharampethhub@upi', 'Nagpur', 'West High Court Road', '27WXYZ8910G2Z1', 21.1400, 79.0600, 4.7, 49500.0, 0, 20.0, 30.0, 10.0)
         ''')
         c.execute('''
             INSERT INTO products (vendor_id, brand, title, category, price, image_url, description)
@@ -119,11 +132,19 @@ def init_db():
             (2, 'Apple', 'iPhone 15 Pro Max 1TB', 'Electronics', 179900.0, 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=500&auto=format&fit=crop&q=60', 'Brand new sealed smartphone with warranty'),
             (2, 'Commercial Dealership', 'Vehicle Booking Advance Token', 'Automobile', 50000.0, 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=500&auto=format&fit=crop&q=60', 'Express showroom booking advance token')
         ''')
+        c.execute('''
+            INSERT INTO coupons (code, discount_pct, min_order_value, is_active)
+            VALUES ('BHARAT10', 10.0, 100.0, 1), ('FESTIVE50', 5.0, 500.0, 1)
+        ''')
     
     conn.commit()
     conn.close()
 
 init_db()
+
+# Cart Session Init
+if "cart" not in st.session_state:
+    st.session_state.cart = []
 
 # -----------------------------------------------------------
 # 2. LOGIC FUNCTIONS
@@ -160,13 +181,39 @@ def generate_upi_qr(upi_id, payee_name, amount, note):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
+def generate_standee_pdf(vendor):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 15, "BHARAT DIGITAL NETWORK", ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, f"OFFICIAL STORE: {vendor['name']}", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Address: {vendor['address']}, {vendor['city']} | GST: {vendor['gstin']}", ln=True, align="C")
+    pdf.line(10, 45, 200, 45)
+    pdf.ln(12)
+
+    # Standee UPI QR
+    qr_bytes = generate_upi_qr(vendor["upi_id"], vendor["name"], 0.0, "Store Purchase")
+    qr_img = io.BytesIO(qr_bytes)
+    pdf.image(qr_img, x=65, y=55, w=80)
+    
+    pdf.set_y(145)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, f"UPI ID: {vendor['upi_id']}", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 11)
+    pdf.cell(0, 8, "Scan with PhonePe, GPay, Paytm or Bharat App to order instantly", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 8, "All purchases secured with Automated 1% Digital Billing Receipt", ln=True, align="C")
+    return pdf.output()
+
 def generate_pdf_invoice(bill_data):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "BHARAT HYPERLOCAL MARKETPLACE", ln=True, align="C")
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, "Tax Invoice / Delivery Memo", ln=True, align="C")
+    pdf.cell(0, 6, f"Official GST / Digital Bill | GSTIN: {bill_data.get('gstin', 'NON-GST')}", ln=True, align="C")
     pdf.line(10, 28, 200, 28)
     pdf.ln(8)
 
@@ -180,15 +227,20 @@ def generate_pdf_invoice(bill_data):
     pdf.line(10, 50, 200, 50)
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(120, 7, "Item Description")
+    pdf.cell(120, 7, "Items Summary")
     pdf.cell(70, 7, "Amount (INR)", ln=True, align="R")
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(120, 7, f"{bill_data['item']}")
     pdf.cell(70, 7, f"Rs {bill_data['price']:,.2f}", ln=True, align="R")
+    
+    if bill_data.get('discount', 0) > 0:
+        pdf.cell(120, 7, "Coupon Discount Applied")
+        pdf.cell(70, 7, f"- Rs {bill_data['discount']:,.2f}", ln=True, align="R")
+
     pdf.cell(120, 7, "Delivery Charges")
     pdf.cell(70, 7, f"Rs {bill_data['fee']:,.2f}", ln=True, align="R")
     
-    pdf.line(10, 78, 200, 78)
+    pdf.line(10, 85, 200, 85)
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(120, 9, "Grand Total Paid:")
@@ -196,7 +248,7 @@ def generate_pdf_invoice(bill_data):
     
     pdf.ln(6)
     pdf.set_font("Helvetica", "I", 9)
-    pdf.cell(0, 6, f"Automated 1% Platform Split: Rs {bill_data['cut']:,.2f} | Net Vendor Settle: Rs {bill_data['payout']:,.2f}", ln=True, align="C")
+    pdf.cell(0, 6, f"1% Platform Fee: Rs {bill_data['cut']:,.2f} | Net Vendor Settlement: Rs {bill_data['payout']:,.2f}", ln=True, align="C")
     return pdf.output()
 
 # -----------------------------------------------------------
@@ -205,8 +257,10 @@ def generate_pdf_invoice(bill_data):
 st.sidebar.title("🇮🇳 Bharat Hyperlocal")
 menu = st.sidebar.radio("Navigation Menu", [
     "🛍️ Customer Marketplace",
+    "🛒 Multi-Item Cart & Checkout",
     "🚚 Track My Orders & Chat",
     "🏪 Vendor Terminal & Orders",
+    "🪧 Vendor QR Standee (Print)",
     "💰 Vendor Settlement & Wallet",
     "📦 Add Product / Manage Shop",
     "🏬 Register New Shop",
@@ -241,7 +295,7 @@ if menu == "🛍️ Customer Marketplace":
     
     f1, f2, f3 = st.columns([2, 1, 1])
     with f1:
-        search_query = st.text_input("🔍 Search any product (e.g. Chai, iPhone, Oil, Sugar):", "")
+        search_query = st.text_input("🔍 Search any item (e.g. Chai, iPhone, Oil, Sugar):", "")
     with f2:
         cat_filter = st.selectbox("Category Filter", ["All Categories", "Grocery", "Electronics", "Automobile", "Real Estate", "Daily Essentials", "Fashion"])
     with f3:
@@ -250,7 +304,7 @@ if menu == "🛍️ Customer Marketplace":
     conn = sqlite3.connect(DB_NAME)
     query = '''
         SELECT p.id, p.brand, p.title, p.category, p.price, p.image_url, p.description,
-               v.id as vendor_id, v.name as vendor_name, v.phone as vendor_phone, v.upi_id, v.rating as vendor_rating, v.lat, v.lon, 
+               v.id as vendor_id, v.name as vendor_name, v.phone as vendor_phone, v.upi_id, v.gstin, v.rating as vendor_rating, v.lat, v.lon, 
                v.free_delivery_above_500, v.base_1km, v.base_2km, v.per_km_extra
         FROM products p
         JOIN vendors v ON p.vendor_id = v.id
@@ -293,6 +347,7 @@ if menu == "🛍️ Customer Marketplace":
             "v_name": row["vendor_name"],
             "v_phone": str(row["vendor_phone"]),
             "v_upi": row["upi_id"],
+            "v_gstin": row["gstin"],
             "v_rating": row["vendor_rating"],
             "v_lat": row["lat"],
             "v_lon": row["lon"],
@@ -331,41 +386,49 @@ if menu == "🛍️ Customer Marketplace":
                         del_display = "FREE" if item['delivery_fee'] == 0 else f"₹{item['delivery_fee']:,.2f}"
                         st.write(f"🚚 Delivery: `{del_display}` ({item['fee_desc']})")
 
-                    if st.button(f"🛒 Order & Pay (₹{item['price']:,.2f})", key=f"btn_{item['p_id']}"):
-                        item_total = item["price"]
-                        del_fee = item["delivery_fee"]
-                        grand_total = item_total + del_fee
-                        cut_1pct = round(item_total * 0.01, 2)
-                        vendor_cut = round(grand_total - cut_1pct, 2)
+                    b_col1, b_col2 = st.columns(2)
+                    with b_col1:
+                        if st.button(f"➕ Add to Cart", key=f"cart_{item['p_id']}"):
+                            st.session_state.cart.append(item)
+                            st.toast(f"Added '{item['brand']} - {item['title']}' to cart!", icon="🛒")
 
-                        conn_o = sqlite3.connect(DB_NAME)
-                        cur = conn_o.cursor()
-                        cur.execute('''
-                            INSERT INTO orders (customer_name, customer_phone, vendor_id, product_id, item_price, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed')
-                        ''', (cust_name, cust_phone, item["v_id"], item["p_id"], item_total, del_fee, grand_total, cut_1pct, vendor_cut, item["distance"]))
-                        
-                        # Add vendor net payout to wallet balance
-                        cur.execute('UPDATE vendors SET wallet_balance = wallet_balance + ? WHERE id = ?', (vendor_cut, item["v_id"]))
-                        conn_o.commit()
-                        order_id = cur.lastrowid
-                        conn_o.close()
+                    with b_col2:
+                        if st.button(f"⚡ Buy Now (₹{item['price']:,.2f})", key=f"btn_{item['p_id']}"):
+                            item_total = item["price"]
+                            del_fee = item["delivery_fee"]
+                            grand_total = item_total + del_fee
+                            cut_1pct = round(item_total * 0.01, 2)
+                            vendor_cut = round(grand_total - cut_1pct, 2)
 
-                        st.session_state.current_bill = {
-                            "order_id": order_id,
-                            "cust": cust_name,
-                            "cust_phone": cust_phone,
-                            "item": f"{item['brand']} - {item['title']}",
-                            "shop": item["v_name"],
-                            "shop_phone": item["v_phone"],
-                            "upi_id": item["v_upi"],
-                            "price": item_total,
-                            "fee": del_fee,
-                            "total": grand_total,
-                            "cut": cut_1pct,
-                            "payout": vendor_cut,
-                            "distance": item["distance"]
-                        }
+                            conn_o = sqlite3.connect(DB_NAME)
+                            cur = conn_o.cursor()
+                            cur.execute('''
+                                INSERT INTO orders (customer_name, customer_phone, vendor_id, items_summary, item_price, discount_amount, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km, status)
+                                VALUES (?, ?, ?, ?, ?, 0.0, ?, ?, ?, ?, ?, 'Order Placed')
+                            ''', (cust_name, cust_phone, item["v_id"], f"{item['brand']} - {item['title']}", item_total, del_fee, grand_total, cut_1pct, vendor_cut, item["distance"]))
+                            
+                            cur.execute('UPDATE vendors SET wallet_balance = wallet_balance + ? WHERE id = ?', (vendor_cut, item["v_id"]))
+                            conn_o.commit()
+                            order_id = cur.lastrowid
+                            conn_o.close()
+
+                            st.session_state.current_bill = {
+                                "order_id": order_id,
+                                "cust": cust_name,
+                                "cust_phone": cust_phone,
+                                "item": f"{item['brand']} - {item['title']}",
+                                "shop": item["v_name"],
+                                "shop_phone": item["v_phone"],
+                                "upi_id": item["v_upi"],
+                                "gstin": item["v_gstin"],
+                                "price": item_total,
+                                "discount": 0.0,
+                                "fee": del_fee,
+                                "total": grand_total,
+                                "cut": cut_1pct,
+                                "payout": vendor_cut,
+                                "distance": item["distance"]
+                            }
 
     # Invoice, Split & Dynamic UPI QR Section
     if "current_bill" in st.session_state:
@@ -383,7 +446,7 @@ if menu == "🛍️ Customer Marketplace":
         with q2:
             st.markdown("### 🧾 Invoice Summary")
             st.write(f"**Customer:** {b['cust']} ({b['cust_phone']})")
-            st.write(f"**Item:** {b['item']}")
+            st.write(f"**Item(s):** {b['item']}")
             st.write(f"**Delivery:** ₹{b['fee']:,.2f}")
             st.markdown(f"### **Grand Total:** :green[₹{b['total']:,.2f}]")
             st.info(f"Platform 1% Cut: ₹{b['cut']:,.2f} | Net Vendor Share: ₹{b['payout']:,.2f}")
@@ -407,7 +470,74 @@ if menu == "🛍️ Customer Marketplace":
             st.link_button("📲 Send to Shopkeeper WhatsApp", f"https://wa.me/{b['shop_phone']}?text={encoded_msg}")
 
 # -----------------------------------------------------------
-# TAB 2: TRACK MY ORDERS & IN-APP CHAT
+# TAB 2: MULTI-ITEM CART & CHECKOUT
+# -----------------------------------------------------------
+elif menu == "🛒 Multi-Item Cart & Checkout":
+    st.subheader("🛒 Your Shopping Cart (Multi-Item Checkout)")
+    
+    if st.session_state.cart:
+        cart_df = pd.DataFrame(st.session_state.cart)
+        st.dataframe(cart_df[["brand", "title", "category", "price", "v_name", "distance"]], use_container_width=True)
+
+        # Check if items belong to single vendor
+        unique_vendors = cart_df["v_id"].nunique()
+        if unique_vendors > 1:
+            st.warning("⚠️ Cart contains items from different shops. Please place separate orders for each shop.")
+        else:
+            items_total = cart_df["price"].sum()
+            sample_item = st.session_state.cart[0]
+            dist = sample_item["distance"]
+            fee, fee_desc = get_delivery_fee(dist, items_total, 1, 20.0, 30.0, 10.0)
+
+            # Promo Code Box
+            coupon_code = st.text_input("Enter Promo Code (e.g. BHARAT10):")
+            discount_amount = 0.0
+            if coupon_code:
+                conn_c = sqlite3.connect(DB_NAME)
+                c_row = conn_c.execute("SELECT discount_pct, min_order_value FROM coupons WHERE code = ? AND is_active = 1", (coupon_code.strip().upper(),)).fetchone()
+                conn_c.close()
+                if c_row:
+                    if items_total >= c_row[1]:
+                        discount_amount = round((items_total * c_row[0] / 100.0), 2)
+                        st.success(f"Coupon Applied! You get ₹{discount_amount:,.2f} OFF ({c_row[0]}%)")
+                    else:
+                        st.error(f"Minimum order of ₹{c_row[1]:,.2f} required for this coupon.")
+                else:
+                    st.error("Invalid coupon code.")
+
+            final_total = items_total - discount_amount + fee
+            st.write(f"Items Subtotal: **₹{items_total:,.2f}** | Discount: **-₹{discount_amount:,.2f}** | Delivery: **₹{fee:,.2f}**")
+            st.markdown(f"### Grand Total: :green[**₹{final_total:,.2f}**]")
+
+            if st.button("🚀 Checkout & Place Combined Order"):
+                cut_1pct = round(items_total * 0.01, 2)
+                vendor_cut = round(final_total - cut_1pct, 2)
+                items_summary = ", ".join([f"{x['brand']} {x['title']}" for x in st.session_state.cart])
+
+                conn_co = sqlite3.connect(DB_NAME)
+                cur = conn_co.cursor()
+                cur.execute('''
+                    INSERT INTO orders (customer_name, customer_phone, vendor_id, items_summary, item_price, discount_amount, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed')
+                ''', ("Rahul Sharma", "919876500000", sample_item["v_id"], items_summary, items_total, discount_amount, fee, final_total, cut_1pct, vendor_cut, dist))
+                
+                cur.execute('UPDATE vendors SET wallet_balance = wallet_balance + ? WHERE id = ?', (vendor_cut, sample_item["v_id"]))
+                conn_co.commit()
+                order_id = cur.lastrowid
+                conn_co.close()
+
+                st.session_state.cart = []
+                st.success(f"🎉 Combined Order #{order_id} placed successfully!")
+                st.rerun()
+
+        if st.button("🗑️ Clear Entire Cart"):
+            st.session_state.cart = []
+            st.rerun()
+    else:
+        st.info("Your cart is currently empty. Browse products in the Customer Marketplace!")
+
+# -----------------------------------------------------------
+# TAB 3: TRACK MY ORDERS & IN-APP CHAT
 # -----------------------------------------------------------
 elif menu == "🚚 Track My Orders & Chat":
     st.subheader("🚚 Track Your Orders & Direct Shop Chat")
@@ -415,10 +545,9 @@ elif menu == "🚚 Track My Orders & Chat":
     
     conn = sqlite3.connect(DB_NAME)
     my_orders = pd.read_sql_query('''
-        SELECT o.id, o.grand_total, o.status, o.distance_km, o.created_at,
-               p.brand, p.title, v.name as shop_name, v.phone as shop_phone
+        SELECT o.id, o.items_summary, o.grand_total, o.status, o.distance_km, o.created_at,
+               v.name as shop_name, v.phone as shop_phone
         FROM orders o
-        JOIN products p ON o.product_id = p.id
         JOIN vendors v ON o.vendor_id = v.id
         WHERE o.customer_phone = ?
         ORDER BY o.created_at DESC
@@ -430,7 +559,7 @@ elif menu == "🚚 Track My Orders & Chat":
             with st.container(border=True):
                 c_t1, c_t2 = st.columns([3, 2])
                 with c_t1:
-                    st.markdown(f"### Order #{o_row['id']} - {o_row['brand']} {o_row['title']}")
+                    st.markdown(f"### Order #{o_row['id']} - {o_row['items_summary']}")
                     st.write(f"🏬 **Shop:** {o_row['shop_name']} | 📍 Distance: `{o_row['distance_km']} KM`")
                     st.write(f"**Amount:** :green[**₹{o_row['grand_total']:,.2f}**] | Date: `{o_row['created_at']}`")
                     
@@ -466,7 +595,7 @@ elif menu == "🚚 Track My Orders & Chat":
         st.info("No orders found for this phone number.")
 
 # -----------------------------------------------------------
-# TAB 3: VENDOR TERMINAL & ORDERS
+# TAB 4: VENDOR TERMINAL & ORDERS
 # -----------------------------------------------------------
 elif menu == "🏪 Vendor Terminal & Orders":
     st.subheader("🔔 Live Order Terminal (Dispatch Management)")
@@ -514,7 +643,8 @@ elif menu == "🏪 Vendor Terminal & Orders":
                     col_o1, col_o2, col_o3 = st.columns([2, 2, 2])
                     with col_o1:
                         st.markdown(f"**Order #{ord_row['id']}** | Customer: `{ord_row['customer_name']}`")
-                        st.write(f"Current Status: `{ord_row['status']}` | Total: **₹{ord_row['grand_total']:,.2f}**")
+                        st.write(f"Items: `{ord_row['items_summary']}`")
+                        st.write(f"Status: `{ord_row['status']}` | Total: **₹{ord_row['grand_total']:,.2f}**")
                     with col_o2:
                         st.write(f"Vendor Payout: :green[**₹{ord_row['vendor_net_payout']:,.2f}**]")
                         st.caption(f"Platform 1% Cut: ₹{ord_row['platform_commission_1pct']:,.2f}")
@@ -537,7 +667,36 @@ elif menu == "🏪 Vendor Terminal & Orders":
             st.info("No orders received yet for this store.")
 
 # -----------------------------------------------------------
-# TAB 4: VENDOR SETTLEMENT & WALLET
+# TAB 5: VENDOR QR STANDEE (Printable PDF Standee)
+# -----------------------------------------------------------
+elif menu == "🪧 Vendor QR Standee (Print)":
+    st.subheader("🪧 Download Official Store Standee QR (For Counter Display)")
+    
+    conn = sqlite3.connect(DB_NAME)
+    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
+    conn.close()
+
+    if not vendors_df.empty:
+        selected_vid = st.selectbox(
+            "Select Shop for Standee Generation",
+            vendors_df["id"].tolist(),
+            format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0]
+        )
+        curr_v = vendors_df[vendors_df["id"] == selected_vid].iloc[0]
+
+        st.info(f"Generating Standee for **{curr_v['name']}** (UPI: `{curr_v['upi_id']}`) | GST: `{curr_v['gstin']}`")
+        standee_pdf_bytes = generate_standee_pdf(curr_v)
+
+        st.download_button(
+            label="🖨️ Download Printable PDF Counter Standee",
+            data=bytes(standee_pdf_bytes),
+            file_name=f"Standee_{curr_v['name'].replace(' ', '_')}.pdf",
+            mime="application/pdf"
+        )
+        st.caption("Aap is PDF ko print karke counter par rakh sakte hain, jisse customer seedha scan karke shopping kar sakein.")
+
+# -----------------------------------------------------------
+# TAB 6: VENDOR SETTLEMENT & WALLET
 # -----------------------------------------------------------
 elif menu == "💰 Vendor Settlement & Wallet":
     st.subheader("💰 Vendor Wallet & Bank Settlement Engine")
@@ -587,7 +746,7 @@ elif menu == "💰 Vendor Settlement & Wallet":
             st.info("No settlement requests yet.")
 
 # -----------------------------------------------------------
-# TAB 5: ADD PRODUCT / MANAGE STORE
+# TAB 7: ADD PRODUCT / MANAGE STORE
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Manage Shop":
     st.subheader("📦 Product Catalog Management")
@@ -638,7 +797,7 @@ elif menu == "📦 Add Product / Manage Shop":
                     st.rerun()
 
 # -----------------------------------------------------------
-# TAB 6: REGISTER NEW SHOP
+# TAB 8: REGISTER NEW SHOP
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Shop":
     st.subheader("🏬 Register New Shop (PAN-India)")
@@ -648,6 +807,7 @@ elif menu == "🏬 Register New Shop":
             name = st.text_input("Store Name", placeholder="Nagpur General Stores")
             phone = st.text_input("WhatsApp Phone (with 91)", value="919876543210")
             upi = st.text_input("Store UPI ID for Payments", value="store@upi")
+            gstin = st.text_input("GSTIN Number (Optional)", value="NON-GST")
             city = st.text_input("City", value="Nagpur")
             address = st.text_input("Address")
         with s_c2:
@@ -662,15 +822,15 @@ elif menu == "🏬 Register New Shop":
             if name and city:
                 conn_r = sqlite3.connect(DB_NAME)
                 conn_r.execute('''
-                    INSERT INTO vendors (name, phone, upi_id, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (name, phone, upi, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
+                    INSERT INTO vendors (name, phone, upi_id, gstin, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (name, phone, upi, gstin, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
                 conn_r.commit()
                 conn_r.close()
                 st.success(f"🎉 '{name}' successfully registered!")
 
 # -----------------------------------------------------------
-# TAB 7: PLATFORM EARNINGS & ANALYTICS
+# TAB 9: PLATFORM EARNINGS & ANALYTICS
 # -----------------------------------------------------------
 else:
     st.subheader("📊 Platform Revenue & Business Analytics")
@@ -695,7 +855,7 @@ else:
         st.write("### 📜 Real-Time Transaction Ledger")
         if not orders_df.empty:
             st.dataframe(orders_df[[
-                "id", "customer_name", "item_price", "delivery_fee",
+                "id", "customer_name", "items_summary", "item_price", "delivery_fee",
                 "grand_total", "platform_commission_1pct", "vendor_net_payout", "status"
             ]], use_container_width=True)
         else:
