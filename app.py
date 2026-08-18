@@ -1,14 +1,16 @@
 import streamlit as st
 import sqlite3
 import math
+import urllib.parse
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
+from fpdf import FPDF
 
 # Page Setup
 st.set_page_config(
-    page_title="Bharat Hyperlocal & High-Value Network",
+    page_title="Bharat All-in-One Hyperlocal Network",
     page_icon="🛍️",
     layout="wide"
 )
@@ -22,11 +24,11 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # Vendors Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS vendors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            phone TEXT DEFAULT '919876543210',
             city TEXT NOT NULL,
             address TEXT,
             lat REAL NOT NULL,
@@ -38,7 +40,6 @@ def init_db():
         )
     ''')
 
-    # Products Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,11 +53,11 @@ def init_db():
         )
     ''')
 
-    # Orders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_name TEXT,
+            customer_phone TEXT,
             vendor_id INTEGER,
             product_id INTEGER,
             item_price REAL,
@@ -73,10 +74,10 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
-            INSERT INTO vendors (name, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
+            INSERT INTO vendors (name, phone, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
             VALUES 
-            ('Nagpur Central Mart', 'Nagpur', 'Sitabuldi Main Market', 21.1458, 79.0882, 1, 20.0, 30.0, 10.0),
-            ('Dharampeth Auto & Electronic World', 'Nagpur', 'West High Court Road', 21.1400, 79.0600, 0, 20.0, 30.0, 10.0)
+            ('Nagpur Central Mart', '919876543210', 'Nagpur', 'Sitabuldi Main Market', 21.1458, 79.0882, 1, 20.0, 30.0, 10.0),
+            ('Dharampeth Auto & Electronic World', '919876543211', 'Nagpur', 'West High Court Road', 21.1400, 79.0600, 0, 20.0, 30.0, 10.0)
         ''')
         c.execute('''
             INSERT INTO products (vendor_id, brand, title, category, price, description)
@@ -84,7 +85,7 @@ def init_db():
             (1, 'Tata Tea', 'Tata Tea Premium 250g', 'Grocery', 50.0, 'Fresh daily morning tea'),
             (1, 'Fortune', 'Refined Sunflower Oil 5L', 'Grocery', 680.0, 'Pure cooking oil pack'),
             (2, 'Apple', 'iPhone 15 Pro Max 1TB', 'Electronics', 179900.0, 'Brand new sealed smartphone'),
-            (2, 'Mahindra / Dealer', 'Commercial Vehicle Advance Token', 'Automobile', 50000.0, 'Express booking advance token')
+            (2, 'Commercial Vehicle', 'Vehicle Advance Booking Token', 'Automobile', 50000.0, 'Express booking advance token')
         ''')
     
     conn.commit()
@@ -93,7 +94,7 @@ def init_db():
 init_db()
 
 # -----------------------------------------------------------
-# 2. DISTANCE & DELIVERY LOGIC
+# 2. HELPER FUNCTIONS: DISTANCE, DELIVERY, PDF INVOICE
 # -----------------------------------------------------------
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -117,24 +118,62 @@ def get_delivery_fee(distance_km, item_price, free_allowed, base_1km, base_2km, 
         fee = base_2km + (extra_km * per_km_extra)
         return round(fee, 2), f"₹{base_2km:.0f} + Extra Distance ({distance_km} KM)"
 
+def generate_pdf_invoice(bill_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "BHARAT HYPERLOCAL MARKETPLACE", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, "Tax Invoice / Delivery Memo", ln=True, align="C")
+    pdf.line(10, 28, 200, 28)
+    pdf.ln(8)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(100, 7, f"Order ID: #{bill_data['order_id']}")
+    pdf.cell(90, 7, f"Customer: {bill_data['cust']}", ln=True)
+    pdf.cell(100, 7, f"Store: {bill_data['shop']}")
+    pdf.cell(90, 7, f"Distance: {bill_data['distance']} KM", ln=True)
+    pdf.ln(4)
+
+    pdf.line(10, 50, 200, 50)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(120, 7, "Item Description")
+    pdf.cell(70, 7, "Amount (INR)", ln=True, align="R")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(120, 7, f"{bill_data['item']}")
+    pdf.cell(70, 7, f"Rs {bill_data['price']:,.2f}", ln=True, align="R")
+    pdf.cell(120, 7, "Delivery Charges")
+    pdf.cell(70, 7, f"Rs {bill_data['fee']:,.2f}", ln=True, align="R")
+    
+    pdf.line(10, 78, 200, 78)
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(120, 9, "Grand Total Paid:")
+    pdf.cell(70, 9, f"Rs {bill_data['total']:,.2f}", ln=True, align="R")
+    
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, f"Automated 1% Platform Split: Rs {bill_data['cut']:,.2f} | Net Vendor Settle: Rs {bill_data['payout']:,.2f}", ln=True, align="C")
+    return pdf.output()
+
 # -----------------------------------------------------------
 # 3. SIDEBAR NAVIGATION
 # -----------------------------------------------------------
 st.sidebar.title("🇮🇳 Bharat Hyperlocal")
 menu = st.sidebar.radio("Navigation Menu", [
-    "🛍️ Customer Portal",
-    "🏪 Vendor / Seller Panel",
+    "🛍️ Customer Marketplace",
+    "🏪 Vendor Product Panel",
     "🏬 Register New Shop",
     "📊 Platform Earnings & Ledger"
 ])
 
 # -----------------------------------------------------------
-# TAB 1: CUSTOMER PORTAL
+# TAB 1: CUSTOMER MARKETPLACE
 # -----------------------------------------------------------
-if menu == "🛍️ Customer Portal":
-    st.subheader("📍 Customer Live Location & Hyperlocal Search")
+if menu == "🛍️ Customer Marketplace":
+    st.subheader("📍 Customer Location & Nearby Stores")
     
-    # Auto GPS detection
     live_loc = get_geolocation()
     detected_lat = 21.1458
     detected_lon = 79.0882
@@ -143,22 +182,23 @@ if menu == "🛍️ Customer Portal":
         detected_lon = live_loc['coords']['longitude']
         st.success(f"📍 GPS Location Auto-Detected: `{detected_lat:.4f}, {detected_lon:.4f}`")
 
-    c1, c2, c3 = st.columns([2, 1, 1])
+    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
     with c1:
         cust_name = st.text_input("Customer Name", value="Rahul Sharma")
     with c2:
-        cust_lat = st.number_input("Customer Latitude", value=float(detected_lat), format="%.4f")
+        cust_phone = st.text_input("Customer WhatsApp Phone", value="919876500000")
     with c3:
+        cust_lat = st.number_input("Customer Latitude", value=float(detected_lat), format="%.4f")
+    with c4:
         cust_lon = st.number_input("Customer Longitude", value=float(detected_lon), format="%.4f")
 
-    search_query = st.text_input("🔍 Search any product (e.g. Chai, iPhone, Oil, Sugar):", "")
+    search_query = st.text_input("🔍 Search any item (e.g. Chai, iPhone, Oil, Sugar, Booking):", "")
 
-    # Fetch inventory from DB
     conn = sqlite3.connect(DB_NAME)
     query = '''
         SELECT p.id, p.brand, p.title, p.category, p.price, p.description,
-               v.id as vendor_id, v.name as vendor_name, v.lat, v.lon, v.free_delivery_above_500,
-               v.base_1km, v.base_2km, v.per_km_extra
+               v.id as vendor_id, v.name as vendor_name, v.phone as vendor_phone, v.lat, v.lon, 
+               v.free_delivery_above_500, v.base_1km, v.base_2km, v.per_km_extra
         FROM products p
         JOIN vendors v ON p.vendor_id = v.id
     '''
@@ -187,6 +227,7 @@ if menu == "🛍️ Customer Portal":
             "desc": row["description"],
             "v_id": row["vendor_id"],
             "v_name": row["vendor_name"],
+            "v_phone": str(row["vendor_phone"]),
             "v_lat": row["lat"],
             "v_lon": row["lon"],
             "distance": dist,
@@ -194,13 +235,10 @@ if menu == "🛍️ Customer Portal":
             "fee_desc": fee_desc
         })
 
-    # Nearest seller sorting
     results.sort(key=lambda x: x["distance"])
-
-    st.write(f"Found **{len(results)}** items near your location (Nearest Shop First):")
+    st.write(f"Showing **{len(results)}** available products near you (Sorted by Nearest Shop First):")
 
     if results:
-        # Live Map Display
         m = folium.Map(location=[cust_lat, cust_lon], zoom_start=13)
         folium.Marker([cust_lat, cust_lon], popup="Your Location (Customer)", icon=folium.Icon(color="blue", icon="user")).add_to(m)
         for item in results:
@@ -210,7 +248,7 @@ if menu == "🛍️ Customer Portal":
                 icon=folium.Icon(color="green", icon="shopping-cart")
             ).add_to(m)
         
-        st_folium(m, height=280, use_container_width=True)
+        st_folium(m, height=260, use_container_width=True)
 
         cols = st.columns(2)
         for idx, item in enumerate(results):
@@ -234,9 +272,9 @@ if menu == "🛍️ Customer Portal":
                         conn_o = sqlite3.connect(DB_NAME)
                         cur = conn_o.cursor()
                         cur.execute('''
-                            INSERT INTO orders (customer_name, vendor_id, product_id, item_price, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (cust_name, item["v_id"], item["p_id"], item_total, del_fee, grand_total, cut_1pct, vendor_cut, item["distance"]))
+                            INSERT INTO orders (customer_name, customer_phone, vendor_id, product_id, item_price, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (cust_name, cust_phone, item["v_id"], item["p_id"], item_total, del_fee, grand_total, cut_1pct, vendor_cut, item["distance"]))
                         conn_o.commit()
                         order_id = cur.lastrowid
                         conn_o.close()
@@ -244,16 +282,19 @@ if menu == "🛍️ Customer Portal":
                         st.session_state.current_bill = {
                             "order_id": order_id,
                             "cust": cust_name,
+                            "cust_phone": cust_phone,
                             "item": f"{item['brand']} - {item['title']}",
                             "shop": item["v_name"],
+                            "shop_phone": item["v_phone"],
                             "price": item_total,
                             "fee": del_fee,
                             "total": grand_total,
                             "cut": cut_1pct,
-                            "payout": vendor_cut
+                            "payout": vendor_cut,
+                            "distance": item["distance"]
                         }
 
-    # Invoice and Split Box
+    # Invoice & Action Center
     if "current_bill" in st.session_state:
         b = st.session_state.current_bill
         st.markdown("---")
@@ -262,7 +303,7 @@ if menu == "🛍️ Customer Portal":
         col_inv1, col_inv2 = st.columns(2)
         with col_inv1:
             st.markdown("### 🧾 Customer Digital Bill")
-            st.write(f"**Customer:** {b['cust']}")
+            st.write(f"**Customer:** {b['cust']} ({b['cust_phone']})")
             st.write(f"**Store:** {b['shop']}")
             st.write(f"**Item:** {b['item']}")
             st.write(f"**Item Amount:** ₹{b['price']:,.2f}")
@@ -273,12 +314,33 @@ if menu == "🛍️ Customer Portal":
             st.markdown("### ⚡ Automated Split Execution")
             st.metric("Platform Cut (1% Pure Profit)", f"₹{b['cut']:,.2f}", delta="Your SaaS Cut")
             st.metric("Vendor Net Settle (99% + Delivery)", f"₹{b['payout']:,.2f}")
-            st.caption("Paisa Escrow API ke zariye automated transfer hota hai.")
+
+            # PDF Invoice Download
+            pdf_bytes = generate_pdf_invoice(b)
+            st.download_button(
+                label="📄 Download Official PDF Receipt",
+                data=bytes(pdf_bytes),
+                file_name=f"Invoice_Order_{b['order_id']}.pdf",
+                mime="application/pdf"
+            )
+
+            # WhatsApp Direct Dispatch Link
+            msg_text = (
+                f"🛍️ *NEW HYPERLOCAL ORDER #{b['order_id']}*\n"
+                f"👤 Customer: {b['cust']}\n"
+                f"📦 Item: {b['item']}\n"
+                f"💰 Total Amount: Rs {b['total']:,.2f}\n"
+                f"📍 Distance: {b['distance']} KM\n"
+                f"✅ 1% Commission Platform Cut Processed."
+            )
+            encoded_msg = urllib.parse.quote(msg_text)
+            whatsapp_url = f"https://wa.me/{b['shop_phone']}?text={encoded_msg}"
+            st.link_button("📲 Send Order to Shopkeeper WhatsApp", whatsapp_url)
 
 # -----------------------------------------------------------
-# TAB 2: VENDOR / SELLER PANEL
+# TAB 2: VENDOR PRODUCT PANEL
 # -----------------------------------------------------------
-elif menu == "🏪 Vendor / Seller Panel":
+elif menu == "🏪 Vendor Product Panel":
     st.subheader("🏪 Vendor Catalog & Policy Management")
     
     conn = sqlite3.connect(DB_NAME)
@@ -339,17 +401,17 @@ elif menu == "🏪 Vendor / Seller Panel":
                         st.rerun()
 
 # -----------------------------------------------------------
-# TAB 3: REGISTER NEW SHOP (Self-Onboarding)
+# TAB 3: REGISTER NEW SHOP
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Shop":
     st.subheader("🏬 Self-Serve Store Onboarding (PAN-India)")
-    st.caption("Kisi bhi gaon, kasbe ya shahar ka dukandar apni dukan yahan turant register kar sakta hai.")
 
     with st.form("new_shop_form"):
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             shop_name = st.text_input("Shop / Enterprise Name", placeholder="e.g. Nagpur Traders")
-            city = st.text_input("City / District", placeholder="e.g. Nagpur, Amravati, Pune")
+            shop_phone = st.text_input("Shop WhatsApp Number (With Country Code)", value="919876543210")
+            city = st.text_input("City / District", placeholder="e.g. Nagpur, Pune, Mumbai")
             address = st.text_input("Full Address / Landmark")
         with col_s2:
             lat = st.number_input("Shop GPS Latitude", value=21.1450, format="%.4f")
@@ -371,12 +433,12 @@ elif menu == "🏬 Register New Shop":
                 conn_ns = sqlite3.connect(DB_NAME)
                 cur = conn_ns.cursor()
                 cur.execute('''
-                    INSERT INTO vendors (name, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (shop_name, city, address, lat, lon, 1 if free_delivery else 0, base_1, base_2, per_km))
+                    INSERT INTO vendors (name, phone, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (shop_name, shop_phone, city, address, lat, lon, 1 if free_delivery else 0, base_1, base_2, per_km))
                 conn_ns.commit()
                 conn_ns.close()
-                st.success(f"🎉 Store '{shop_name}' registered successfully! Ab aap saman list kar sakte hain.")
+                st.success(f"🎉 Store '{shop_name}' registered successfully!")
             else:
                 st.error("Dukan ka naam aur shahar zaroori hai.")
 
@@ -406,4 +468,4 @@ else:
             "grand_total", "platform_commission_1pct", "vendor_net_payout", "created_at"
         ]], use_container_width=True)
     else:
-        st.info("Abhi tak koi order nahi hua hai. Customer Portal se order test karein.")
+        st.info("Abhi tak koi order nahi hua hai. Customer Marketplace se order test karein.")
