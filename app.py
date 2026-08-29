@@ -8,9 +8,17 @@ import pandas as pd
 import folium
 import qrcode
 import io
+import json
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
 from fpdf import FPDF
+from PIL import Image
+
+try:
+    import google.generativeai as genai
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
 
 st.set_page_config(page_title="Bharat Premium Hyperlocal", page_icon="👑", layout="wide")
 
@@ -19,63 +27,37 @@ st.set_page_config(page_title="Bharat Premium Hyperlocal", page_icon="👑", lay
 # ==========================================
 st.markdown("""
 <style>
-/* 1. Sidebar Background (Multi-Color Premium Gradient) */
 [data-testid="stSidebar"] {
     background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
-
-/* Sidebar Title - Premium Gold */
 [data-testid="stSidebar"] h1 {
     color: #FFD700 !important; 
     font-family: 'Georgia', serif !important;
     letter-spacing: 1.2px;
     text-shadow: 0px 2px 8px rgba(255, 215, 0, 0.4);
 }
-
-/* 2. Menu Buttons (Glassmorphism Tiles) */
-div[role="radiogroup"] > label p { 
-    color: #F8FAFC !important; 
-    font-weight: 500; 
-    font-size: 15px; 
-    margin: 0;
-}
+div[role="radiogroup"] > label p { color: #F8FAFC !important; font-weight: 500; font-size: 15px; margin: 0; }
 div[role="radiogroup"] > label {
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    padding: 12px 15px;
-    margin-bottom: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 12px 15px;
+    margin-bottom: 10px; border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px);
     transition: all 0.3s ease;
 }
 div[role="radiogroup"] > label:hover {
     background: linear-gradient(90deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.05) 100%);
-    border-left: 4px solid #D4AF37;
-    transform: translateX(5px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    border-left: 4px solid #D4AF37; transform: translateX(5px); box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 div[role="radiogroup"] > label span[data-baseweb="radio"] { display: none !important; }
-
-/* 3. Main Page Background */
 .stApp { background: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; }
-
-/* 4. Luxury 3D Product Cards */
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: 18px !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04) !important;
-    border: 1px solid rgba(229, 184, 11, 0.3) !important;
-    background: #ffffff !important;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    padding: 12px;
+    border-radius: 18px !important; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid rgba(229, 184, 11, 0.3) !important; background: #ffffff !important;
+    transition: transform 0.3s ease, box-shadow 0.3s ease; padding: 12px;
 }
 div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 32px rgba(229, 184, 11, 0.15) !important;
+    transform: translateY(-5px); box-shadow: 0 12px 32px rgba(229, 184, 11, 0.15) !important;
     border: 1px solid rgba(229, 184, 11, 0.8) !important;
 }
-
-/* 5. Premium Buttons */
 .stButton > button {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
     color: #ffffff !important; border-radius: 30px !important; border: none !important;
@@ -83,21 +65,12 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
     transition: all 0.3s ease !important;
 }
 .stButton > button:hover { transform: scale(1.02); }
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important; color: #111 !important;
-}
-
-/* 6. 🔥 BROAD MULTI-COLOR PREMIUM TITLE FOR ALL PAGES */
+.stButton > button[kind="primary"] { background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important; color: #111 !important; }
 .premium-title {
     background: linear-gradient(90deg, #FF1493, #FF8C00, #FFD700, #00BFFF);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-size: 2.8rem;
-    font-weight: 900;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding-bottom: 15px;
-    letter-spacing: 1px;
-    text-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: 2.8rem; font-weight: 900; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding-bottom: 15px; letter-spacing: 1px; text-shadow: 2px 2px 5px rgba(0,0,0,0.1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -145,6 +118,7 @@ def init_db():
 
 init_db()
 if "cart" not in st.session_state: st.session_state.cart = []
+if "scanned_data" not in st.session_state: st.session_state.scanned_data = {"brand": "", "title": "", "price": 0.0, "desc": ""}
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0; d_lat, d_lon = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
@@ -526,35 +500,83 @@ elif menu == "💳 Vendor Wallet & Refund":
         if not logs_df.empty: st.dataframe(logs_df, use_container_width=True)
 
 # -----------------------------------------------------------
-# TAB 9: ADD PRODUCT / PROPERTY LISTING
+# TAB 9: ADD PRODUCT / PROPERTY LISTING (WITH AI CAMERA SCANNER)
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Property":
-    st.markdown("<div class='premium-title'>📦 Product & Listing Management</div>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-title'>📦 Smart AI Product Listing</div>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
 
-    t1, t2 = st.tabs(["➕ List New Item", "⚙️ Store Settings"])
+    t1, t2 = st.tabs(["📸 AI Camera Scanner", "⚙️ Store Settings"])
+    
     with t1:
+        st.info("💡 **Tip:** प्रोडक्ट के डब्बे या MRP लेबल की फोटो खींचें, Google Gemini AI अपने आप MRP, ब्रांड और नाम पढ़कर फॉर्म भर देगा!")
+        
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            api_key = st.text_input("🔑 Enter Free Google Gemini API Key", type="password", help="AI Scanner चलाने के लिए Gemini API Key डालें")
+            if not api_key: st.caption("👉 Google AI Studio से फ्री API key जनरेट करें।")
+            
+        scanned_image = st.camera_input("📸 Scan Product Box / Label")
+
+        if scanned_image is not None and api_key:
+            if st.button("✨ Extract Details using AI", use_container_width=True, type="primary"):
+                with st.spinner("🧠 AI is analyzing MRP, Brand and Product Name..."):
+                    try:
+                        genai.configure(api_key=api_key)
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        img = Image.open(scanned_image)
+                        
+                        prompt = """
+                        Extract the following product details from the image in strict JSON format:
+                        {
+                            "brand": "Brand Name",
+                            "title": "Product Title/Name",
+                            "price": <numeric value of MRP or Price, numbers only>,
+                            "desc": "Short description, ingredients, or key features"
+                        }
+                        Return ONLY valid JSON.
+                        """
+                        response = model.generate_content([prompt, img], generation_config={"response_mime_type": "application/json"})
+                        data = json.loads(response.text)
+                        
+                        st.session_state.scanned_data["brand"] = data.get("brand", "")
+                        st.session_state.scanned_data["title"] = data.get("title", "")
+                        st.session_state.scanned_data["price"] = float(data.get("price", 0.0))
+                        st.session_state.scanned_data["desc"] = data.get("desc", "")
+                        
+                        st.success("✅ AI Scan Complete! Details Auto-filled below. Please verify and publish.")
+                    except Exception as e:
+                        st.error(f"Scan Error: Please check API Key or Image clarity. Details: {e}")
+
+        # --- The Product Form (Values linked to Session State) ---
+        st.markdown("### 📝 Edit & Publish Listing")
         with st.form("prod_form"):
             s_id = st.selectbox("Select Store", vendors_df["id"].tolist(), format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0])
             c_p1, c_p2 = st.columns(2)
             with c_p1:
-                b_name = st.text_input("Brand / Project Name")
-                p_name = st.text_input("Product Title / Plot No.")
-                p_cat = st.selectbox("Category", ["Real Estate", "Grocery", "Electronics", "Automobile", "Fashion"])
+                b_name = st.text_input("Brand / Company Name", value=st.session_state.scanned_data["brand"])
+                p_name = st.text_input("Product Title", value=st.session_state.scanned_data["title"])
+                p_cat = st.selectbox("Category", ["Grocery", "Electronics", "Fashion", "Real Estate", "Automobile"])
                 is_high = st.checkbox("High-Value Property/Vehicle?", value=False)
             with c_p2:
-                p_val = st.number_input("Full Selling Price (Rs)", min_value=50.0, value=500.0, step=50.0)
+                # Use AI Extracted MRP/Price
+                p_val = st.number_input("Full Selling Price / MRP (Rs)", min_value=1.0, value=max(1.0, float(st.session_state.scanned_data["price"])), step=10.0)
                 adv_val = st.number_input("Advance Token (if High-Value)", min_value=0.0, value=11000.0 if is_high else 0.0)
                 img_link = st.text_input("Cover Image URL", placeholder="https://via.placeholder.com/200")
-                p_desc = st.text_area("Full Description")
+                p_desc = st.text_area("Full Description", value=st.session_state.scanned_data["desc"])
 
-            if st.form_submit_button("🚀 Publish Listing") and b_name and p_name:
-                conn_i = sqlite3.connect(DB_NAME)
-                conn_i.execute('''INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, image_url, description)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, img_link, p_desc))
-                conn_i.commit(); conn_i.close(); st.success("✅ Listed successfully!"); st.rerun()
+            if st.form_submit_button("🚀 Publish Listing"):
+                if b_name and p_name:
+                    conn_i = sqlite3.connect(DB_NAME)
+                    conn_i.execute('''INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, image_url, description)
+                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, img_link, p_desc))
+                    conn_i.commit(); conn_i.close()
+                    # Reset scanned data
+                    st.session_state.scanned_data = {"brand": "", "title": "", "price": 0.0, "desc": ""}
+                    st.success("✅ Listed successfully!"); st.rerun()
+
     with t2:
         for _, v in vendors_df.iterrows():
             with st.expander(f"📍 {v['name']} ({v['city']})"):
@@ -566,7 +588,7 @@ elif menu == "📦 Add Product / Property":
                     conn_s.commit(); conn_s.close(); st.success("Updated!"); st.rerun()
 
 # -----------------------------------------------------------
-# TAB 10: REGISTER NEW STORE / RIDER
+# TAB 10: REGISTER NEW STORE
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Store":
     st.markdown("<div class='premium-title'>🏬 Enterprise & Rider Onboarding</div>", unsafe_allow_html=True)
@@ -605,7 +627,7 @@ elif menu == "🏬 Register New Store":
                 except Exception: st.error("Phone number already registered.")
 
 # -----------------------------------------------------------
-# TAB 11: PLATFORM EARNINGS LEDGER & ADMIN APPROVALS
+# TAB 11: PLATFORM EARNINGS LEDGER
 # -----------------------------------------------------------
 else:
     st.markdown("<div class='premium-title'>📊 Platform Earnings Ledger</div>", unsafe_allow_html=True)
