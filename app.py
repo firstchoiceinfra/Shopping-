@@ -14,14 +14,14 @@ from fpdf import FPDF
 
 st.set_page_config(
     page_title="Bharat All-in-One Hyperlocal & Real Estate Platform",
-    page_icon="🇮🇳",
+    page_icon="🛍️",
     layout="wide"
 )
 
 DB_NAME = "hyperlocal_market.db"
 
 # -----------------------------------------------------------
-# 1. DATABASE SETUP & MIGRATION HELPER
+# 1. DATABASE SETUP & ROBUST MIGRATION HELPER
 # -----------------------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -51,7 +51,6 @@ def init_db():
         )
     ''')
 
-    # Safe Schema Migrations for Vendors (agar purani file ho to columns add ho jayein)
     vendor_cols = [col[1] for col in c.execute("PRAGMA table_info(vendors)").fetchall()]
     if "rera_id" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN rera_id TEXT DEFAULT 'N/A'")
@@ -62,7 +61,7 @@ def init_db():
     if "gstin" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN gstin TEXT DEFAULT 'NON-GST'")
 
-    # Delivery Partners Table
+    # Riders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS riders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +128,7 @@ def init_db():
         )
     ''')
 
-    # Orders Table
+    # Orders Table with Barcode, GST & OTP
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,7 +187,7 @@ def init_db():
         )
     ''')
 
-    # Check & seed default items
+    # Default Demo Data
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
@@ -223,7 +222,7 @@ if "cart" not in st.session_state:
     st.session_state.cart = []
 
 # -----------------------------------------------------------
-# 2. HELPER FUNCTIONS
+# 2. LOGIC FUNCTIONS
 # -----------------------------------------------------------
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -237,15 +236,15 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 def get_delivery_fee(distance_km, item_price, free_allowed, base_1km, base_2km, per_km_extra):
     if item_price >= 500 and free_allowed == 1:
-        return 0.0, "FREE Delivery (Above ₹500 Policy)"
+        return 0.0, "FREE Delivery (Above Rs 500 Policy)"
     if distance_km <= 1.0:
-        return float(base_1km), f"₹{base_1km:.0f} (Within 1 KM)"
+        return float(base_1km), f"Rs {base_1km:.0f} (Within 1 KM)"
     elif distance_km <= 2.0:
-        return float(base_2km), f"₹{base_2km:.0f} (Within 2 KM)"
+        return float(base_2km), f"Rs {base_2km:.0f} (Within 2 KM)"
     else:
         extra_km = distance_km - 2.0
         fee = base_2km + (extra_km * per_km_extra)
-        return round(fee, 2), f"₹{base_2km:.0f} + Extra Distance ({distance_km} KM)"
+        return round(fee, 2), f"Rs {base_2km:.0f} + Extra Distance ({distance_km} KM)"
 
 def generate_upi_qr(upi_id, payee_name, amount, note):
     upi_url = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(payee_name)}&am={amount:.2f}&cu=INR&tn={urllib.parse.quote(note)}"
@@ -256,6 +255,31 @@ def generate_upi_qr(upi_id, payee_name, amount, note):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+def generate_standee_pdf(vendor):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 15, "BHARAT DIGITAL NETWORK", ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, f"OFFICIAL STORE: {vendor['name']}", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Address: {vendor['address']}, {vendor['city']} | GST: {vendor['gstin']} | RERA: {vendor['rera_id']}", ln=True, align="C")
+    pdf.line(10, 45, 200, 45)
+    pdf.ln(12)
+
+    qr_bytes = generate_upi_qr(vendor["upi_id"], vendor["name"], 0.0, "Store Purchase")
+    qr_img = io.BytesIO(qr_bytes)
+    pdf.image(qr_img, x=65, y=55, w=80)
+    
+    pdf.set_y(145)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, f"UPI ID: {vendor['upi_id']}", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 11)
+    pdf.cell(0, 8, "Scan with PhonePe, GPay, Paytm or Bharat App to order instantly", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 8, "All transactions secured with Automated 1% Digital Billing Receipt", ln=True, align="C")
+    return pdf.output()
 
 def generate_pdf_invoice(bill_data):
     pdf = FPDF()
@@ -312,6 +336,7 @@ menu = st.sidebar.radio("Navigation Menu", [
     "🚚 Track My Orders & Chat",
     "🛵 Delivery Partner / Rider Mode",
     "🏪 Vendor Terminal & Orders",
+    "🪧 Vendor QR Standee (Print)",
     "💰 Vendor Settlement & Wallet",
     "📦 Add Product / Property Listing",
     "🏬 Register New Store / Agency",
@@ -350,7 +375,7 @@ if menu == "🛍️ Customer Marketplace":
     with f2:
         cat_filter = st.selectbox("Category Filter", ["All Categories", "Real Estate", "Grocery", "Electronics", "Automobile", "Daily Essentials", "Fashion"])
     with f3:
-        price_range = st.selectbox("Budget Filter", ["All Prices (₹50 to ₹50L+)", "Under ₹500", "₹500 - ₹5,000", "High-Value Deals (Above ₹50,000)"])
+        price_range = st.selectbox("Budget Filter", ["All Prices (Rs 50 to Rs 50L+)", "Under Rs 500", "Rs 500 - Rs 5,000", "High-Value Deals (Above Rs 50,000)"])
 
     conn = sqlite3.connect(DB_NAME)
     query = '''
@@ -373,11 +398,11 @@ if menu == "🛍️ Customer Marketplace":
         if cat_filter != "All Categories" and row["category"] != cat_filter:
             continue
 
-        if price_range == "Under ₹500" and row["price"] >= 500:
+        if price_range == "Under Rs 500" and row["price"] >= 500:
             continue
-        elif price_range == "₹500 - ₹5,000" and (row["price"] < 500 or row["price"] > 5000):
+        elif price_range == "Rs 500 - Rs 5,000" and (row["price"] < 500 or row["price"] > 5000):
             continue
-        elif price_range == "High-Value Deals (Above ₹50,000)" and row["price"] < 50000:
+        elif price_range == "High-Value Deals (Above Rs 50,000)" and row["price"] < 50000:
             continue
 
         dist = calculate_distance(cust_lat, cust_lon, row["lat"], row["lon"])
@@ -445,13 +470,13 @@ if menu == "🛍️ Customer Marketplace":
                         st.caption(f"Category: `{item['category']}` | ⭐ `{item['v_rating']}/5.0` | {kyc_badge} {rera_badge}")
                         
                         if item["is_high_val"] == 1:
-                            st.markdown(f"Total Valuation: :blue[**₹{item['price']:,.2f}**]")
-                            st.markdown(f"🔒 Token Advance to Book: :green[**₹{item['advance_token']:,.2f}**]")
+                            st.markdown(f"Total Valuation: :blue[**Rs {item['price']:,.2f}**]")
+                            st.markdown(f"🔒 Token Advance to Book: :green[**Rs {item['advance_token']:,.2f}**]")
                         else:
-                            st.markdown(f"Price: :green[**₹{item['price']:,.2f}**]")
+                            st.markdown(f"Price: :green[**Rs {item['price']:,.2f}**]")
 
                         st.caption(f"🏬 **Store/Firm:** {item['v_name']} ({item['distance']} KM away)")
-                        del_display = "FREE" if item['delivery_fee'] == 0 else f"₹{item['delivery_fee']:,.2f}"
+                        del_display = "FREE" if item['delivery_fee'] == 0 else f"Rs {item['delivery_fee']:,.2f}"
                         st.write(f"🚚 Delivery/Site Logistics: `{del_display}` ({item['fee_desc']})")
 
                     b_col1, b_col2 = st.columns(2)
@@ -473,7 +498,7 @@ if menu == "🛍️ Customer Marketplace":
                                 st.toast(f"Added '{item['brand']} - {item['title']}' to cart!", icon="🛒")
 
                     with b_col2:
-                        btn_label = f"🔒 Book Advance (₹{item['advance_token']:,.2f})" if item["is_high_val"] == 1 else f"⚡ Buy Now (₹{item['price']:,.2f})"
+                        btn_label = f"🔒 Book Advance (Rs {item['advance_token']:,.2f})" if item["is_high_val"] == 1 else f"⚡ Buy Now (Rs {item['price']:,.2f})"
                         if st.button(btn_label, key=f"btn_{item['p_id']}"):
                             item_total = item["price"]
                             pay_now = item["advance_token"] if item["is_high_val"] == 1 else item["price"]
@@ -527,16 +552,16 @@ if menu == "🛍️ Customer Marketplace":
             st.markdown("### 📱 Scan & Pay via UPI")
             qr_bytes = generate_upi_qr(b["upi_id"], b["shop"], b["total"], f"Order_{b['order_id']}")
             st.image(qr_bytes, width=210)
-            st.write(f"**Payee UPI:** `{b['upi_id']}` | **Total:** :green[**₹{b['total']:,.2f}**]")
+            st.write(f"**Payee UPI:** `{b['upi_id']}` | **Total:** :green[**Rs {b['total']:,.2f}**]")
             st.warning(f"🔒 **Your Secret Delivery/Booking OTP:** `{b.get('otp', '1234')}`")
             
         with q2:
             st.markdown("### 🧾 Invoice Summary")
             st.write(f"**Customer:** {b['cust']} ({b['cust_phone']})")
             st.write(f"**Item(s):** {b['item']}")
-            st.write(f"**Delivery:** ₹{b['fee']:,.2f}")
-            st.markdown(f"### **Total Amount Paid:** :green[₹{b['total']:,.2f}]")
-            st.info(f"Platform 1% Cut: ₹{b['cut']:,.2f} | Net Vendor Share: ₹{b['payout']:,.2f}")
+            st.write(f"**Delivery:** Rs {b['fee']:,.2f}")
+            st.markdown(f"### **Total Amount Paid:** :green[Rs {b['total']:,.2f}]")
+            st.info(f"Platform 1% Cut: Rs {b['cut']:,.2f} | Net Vendor Share: Rs {b['payout']:,.2f}")
 
             pdf_bytes = generate_pdf_invoice(b)
             st.download_button(
@@ -584,15 +609,15 @@ elif menu == "🛒 Multi-Item Cart & Checkout":
                 if c_row:
                     if items_total >= c_row[1]:
                         discount_amount = round((items_total * c_row[0] / 100.0), 2)
-                        st.success(f"Coupon Applied! You get ₹{discount_amount:,.2f} OFF ({c_row[0]}%)")
+                        st.success(f"Coupon Applied! You get Rs {discount_amount:,.2f} OFF ({c_row[0]}%)")
                     else:
-                        st.error(f"Minimum order of ₹{c_row[1]:,.2f} required for this coupon.")
+                        st.error(f"Minimum order of Rs {c_row[1]:,.2f} required for this coupon.")
                 else:
                     st.error("Invalid coupon code.")
 
             final_total = items_total - discount_amount + fee
-            st.write(f"Items Subtotal: **₹{items_total:,.2f}** | Discount: **-₹{discount_amount:,.2f}** | Delivery: **₹{fee:,.2f}**")
-            st.markdown(f"### Grand Total: :green[**₹{final_total:,.2f}**]")
+            st.write(f"Items Subtotal: **Rs {items_total:,.2f}** | Discount: **-Rs {discount_amount:,.2f}** | Delivery: **Rs {fee:,.2f}**")
+            st.markdown(f"### Grand Total: :green[**Rs {final_total:,.2f}**]")
 
             if st.button("🚀 Checkout & Place Combined Order"):
                 cut_1pct = round(items_total * 0.01, 2)
@@ -669,7 +694,7 @@ elif menu == "🚚 Track My Orders & Chat":
                 with c_t1:
                     st.markdown(f"### Order #{o_row['id']} - {o_row['items_summary']}")
                     st.write(f"🏬 **Shop/Firm:** {o_row['shop_name']} | 📍 Distance: `{o_row['distance_km']} KM`")
-                    st.write(f"**Amount Paid:** :green[**₹{o_row['grand_total']:,.2f}**] | Date: `{o_row['created_at']}`")
+                    st.write(f"**Amount Paid:** :green[**Rs {o_row['grand_total']:,.2f}**] | Date: `{o_row['created_at']}`")
                     st.warning(f"🔒 **Your Delivery / Deal OTP:** `{o_row['delivery_otp']}`")
                     
                     status = o_row['status']
@@ -743,7 +768,7 @@ elif menu == "🛵 Delivery Partner / Rider Mode":
             )
             curr_rider = riders_df[riders_df["id"] == selected_rider_id].iloc[0]
         with r_col2:
-            st.metric("Rider Delivery Earnings Wallet", f"₹{curr_rider['wallet_balance']:,.2f}", delta="Per-Order Delivery Pay")
+            st.metric("Rider Delivery Earnings Wallet", f"Rs {curr_rider['wallet_balance']:,.2f}", delta="Per-Order Delivery Pay")
 
         st.markdown("---")
         st.write("### 📦 Available Nearby Orders for Delivery:")
@@ -769,7 +794,7 @@ elif menu == "🛵 Delivery Partner / Rider Mode":
                         st.write(f"📦 Items: `{o_item['items_summary']}`")
                     with col_r2:
                         st.write(f"📍 Distance: **{o_item['distance_km']} KM**")
-                        st.write(f"💰 Delivery Earning: :green[**₹{o_item['delivery_fee']:,.2f}**]")
+                        st.write(f"💰 Delivery Earning: :green[**Rs {o_item['delivery_fee']:,.2f}**]")
                         st.caption(f"Current Status: `{o_item['status']}`")
                     with col_r3:
                         if o_item["status"] == "Order Placed":
@@ -799,7 +824,7 @@ elif menu == "🛵 Delivery Partner / Rider Mode":
                                     conn_up.execute("UPDATE riders SET wallet_balance = wallet_balance + ? WHERE id = ?", (o_item['delivery_fee'], selected_rider_id))
                                     conn_up.commit()
                                     conn_up.close()
-                                    st.success(f"🎉 Delivery Verified! ₹{o_item['delivery_fee']:,.2f} added to your wallet!")
+                                    st.success(f"🎉 Delivery Verified! Rs {o_item['delivery_fee']:,.2f} added to your wallet!")
                                     st.rerun()
                                 else:
                                     st.error("❌ Invalid OTP! Ask customer for 4-digit code.")
@@ -842,10 +867,10 @@ elif menu == "🏪 Vendor Terminal & Orders":
                     with col_o1:
                         st.markdown(f"**Order #{ord_row['id']}** | Customer: `{ord_row['customer_name']}`")
                         st.write(f"Items: `{ord_row['items_summary']}`")
-                        st.write(f"Status: `{ord_row['status']}` | Paid: **₹{ord_row['grand_total']:,.2f}**")
+                        st.write(f"Status: `{ord_row['status']}` | Paid: **Rs {ord_row['grand_total']:,.2f}**")
                     with col_o2:
-                        st.write(f"Vendor Payout: :green[**₹{ord_row['vendor_net_payout']:,.2f}**]")
-                        st.caption(f"Platform 1% Cut: ₹{ord_row['platform_commission_1pct']:,.2f}")
+                        st.write(f"Vendor Payout: :green[**Rs {ord_row['vendor_net_payout']:,.2f}**]")
+                        st.caption(f"Platform 1% Cut: Rs {ord_row['platform_commission_1pct']:,.2f}")
                     with col_o3:
                         if ord_row["status"] == "Order Placed":
                             if st.button("Self Dispatch / Handover 🚚", key=f"disp_{ord_row['id']}"):
@@ -865,7 +890,35 @@ elif menu == "🏪 Vendor Terminal & Orders":
             st.info("No orders received yet for this store.")
 
 # -----------------------------------------------------------
-# TAB 7: VENDOR SETTLEMENT & WALLET
+# TAB 7: VENDOR QR STANDEE (Printable PDF)
+# -----------------------------------------------------------
+elif menu == "🪧 Vendor QR Standee (Print)":
+    st.subheader("🪧 Download Official Store Standee QR (For Counter Display)")
+    
+    conn = sqlite3.connect(DB_NAME)
+    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
+    conn.close()
+
+    if not vendors_df.empty:
+        selected_vid = st.selectbox(
+            "Select Shop for Standee Generation",
+            vendors_df["id"].tolist(),
+            format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0]
+        )
+        curr_v = vendors_df[vendors_df["id"] == selected_vid].iloc[0]
+
+        st.info(f"Generating Standee for **{curr_v['name']}** (UPI: `{curr_v['upi_id']}`) | GST: `{curr_v['gstin']}` | RERA: `{curr_v['rera_id']}`")
+        standee_pdf_bytes = generate_standee_pdf(curr_v)
+
+        st.download_button(
+            label="🖨️ Download Printable PDF Counter Standee",
+            data=bytes(standee_pdf_bytes),
+            file_name=f"Standee_{curr_v['name'].replace(' ', '_')}.pdf",
+            mime="application/pdf"
+        )
+
+# -----------------------------------------------------------
+# TAB 8: VENDOR SETTLEMENT & WALLET
 # -----------------------------------------------------------
 elif menu == "💰 Vendor Settlement & Wallet":
     st.subheader("💰 Vendor Wallet & Bank Settlement Engine")
@@ -884,11 +937,11 @@ elif menu == "💰 Vendor Settlement & Wallet":
 
         w1, w2 = st.columns(2)
         with w1:
-            st.metric("Net Available Wallet Balance", f"₹{curr_vendor['wallet_balance']:,.2f}", delta="Ready for Payout")
+            st.metric("Net Available Wallet Balance", f"Rs {curr_vendor['wallet_balance']:,.2f}", delta="Ready for Payout")
             st.write(f"Linked UPI ID: `{curr_vendor['upi_id']}`")
         with w2:
             with st.form("payout_request_form"):
-                payout_amt = st.number_input("Request Payout Amount (₹)", min_value=100.0, max_value=float(curr_vendor['wallet_balance']) if curr_vendor['wallet_balance'] > 0 else 100.0, value=float(curr_vendor['wallet_balance']) if curr_vendor['wallet_balance'] > 0 else 100.0)
+                payout_amt = st.number_input("Request Payout Amount (Rs)", min_value=100.0, max_value=float(curr_vendor['wallet_balance']) if curr_vendor['wallet_balance'] > 0 else 100.0, value=float(curr_vendor['wallet_balance']) if curr_vendor['wallet_balance'] > 0 else 100.0)
                 submit_payout = st.form_submit_button("⚡ Request Instant Settlement")
                 if submit_payout:
                     if curr_vendor['wallet_balance'] >= payout_amt:
@@ -899,7 +952,7 @@ elif menu == "💰 Vendor Settlement & Wallet":
                         cur.execute("UPDATE vendors SET wallet_balance = wallet_balance - ? WHERE id = ?", (payout_amt, v_select))
                         conn_p.commit()
                         conn_p.close()
-                        st.success(f"✅ Settlement request of ₹{payout_amt:,.2f} submitted to Platform Admin!")
+                        st.success(f"✅ Settlement request of Rs {payout_amt:,.2f} submitted to Platform Admin!")
                         st.rerun()
                     else:
                         st.error("Insufficient wallet balance.")
@@ -913,7 +966,7 @@ elif menu == "💰 Vendor Settlement & Wallet":
             st.dataframe(settle_df, use_container_width=True)
 
 # -----------------------------------------------------------
-# TAB 8: ADD PRODUCT / PROPERTY LISTING
+# TAB 9: ADD PRODUCT / PROPERTY LISTING
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Property Listing":
     st.subheader("📦 Product & Real Estate Listing Management")
@@ -922,7 +975,7 @@ elif menu == "📦 Add Product / Property Listing":
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
 
-    t1, t2 = st.tabs(["➕ List New Item / Property (₹50 to ₹50 Lakh+)", "⚙️ Store Settings & Promotion"])
+    t1, t2 = st.tabs(["➕ List New Item / Property (Rs 50 to Rs 50 Lakh+)", "⚙️ Store Settings & Promotion"])
     with t1:
         with st.form("prod_form"):
             s_id = st.selectbox(
@@ -936,7 +989,7 @@ elif menu == "📦 Add Product / Property Listing":
                 p_cat = st.selectbox("Category", ["Real Estate", "Grocery", "Electronics", "Automobile", "Daily Essentials", "Fashion"])
                 is_high = st.checkbox("Is this a High-Value Property / Vehicle / Machinery?", value=False)
             with c_p2:
-                p_val = st.number_input("Full Selling Price (₹50 to ₹5,00,00,000)", min_value=50.0, max_value=500000000.0, value=500.0, step=50.0)
+                p_val = st.number_input("Full Selling Price (Rs 50 to Rs 5,00,00,000)", min_value=50.0, max_value=500000000.0, value=500.0, step=50.0)
                 adv_val = st.number_input("Advance Booking Token (if High-Value)", min_value=0.0, max_value=5000000.0, value=11000.0 if is_high else 0.0)
                 img_link = st.text_input("Cover Image URL", placeholder="https://example.com/cover.jpg")
                 vid_link = st.text_input("360° / Layout Video URL (Optional)", placeholder="https://example.com/video.mp4")
@@ -945,10 +998,10 @@ elif menu == "📦 Add Product / Property Listing":
             if st.form_submit_button("🚀 Publish Listing (Free)"):
                 if b_name and p_name:
                     conn_i = sqlite3.connect(DB_NAME)
-                    conn_i.execute('''
+                    conn_i.execute(\'\'\'
                         INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, video_url, image_url, description)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, vid_link, img_link, p_desc))
+                    \'\'\', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, vid_link, img_link, p_desc))
                     conn_i.commit()
                     conn_i.close()
                     st.success(f"✅ '{b_name} - {p_name}' listed successfully!")
@@ -957,7 +1010,7 @@ elif menu == "📦 Add Product / Property Listing":
     with t2:
         for _, v in vendors_df.iterrows():
             with st.expander(f"📍 {v['name']} ({v['city']})"):
-                toggle_free = st.toggle("Offer FREE Delivery above ₹500", value=bool(v["free_delivery_above_500"]), key=f"f_{v['id']}")
+                toggle_free = st.toggle("Offer FREE Delivery above Rs 500", value=bool(v["free_delivery_above_500"]), key=f"f_{v['id']}")
                 toggle_spon = st.toggle("Enable Sponsored Top Badge (Ad Promotion)", value=bool(v["is_sponsored"]), key=f"sp_{v['id']}")
                 if st.button("Save Settings", key=f"s_{v['id']}"):
                     conn_s = sqlite3.connect(DB_NAME)
@@ -968,7 +1021,7 @@ elif menu == "📦 Add Product / Property Listing":
                     st.rerun()
 
 # -----------------------------------------------------------
-# TAB 9: REGISTER NEW STORE / AGENCY
+# TAB 10: REGISTER NEW STORE / AGENCY
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Store / Agency":
     st.subheader("🏬 Enterprise & Rider Onboarding Portal (PAN-India)")
@@ -989,18 +1042,18 @@ elif menu == "🏬 Register New Store / Agency":
             with s_c2:
                 lat = st.number_input("GPS Latitude", value=21.1450, format="%.4f")
                 lon = st.number_input("GPS Longitude", value=79.0800, format="%.4f")
-                f_del = st.checkbox("Free Delivery above ₹500", value=True)
-                b1 = st.number_input("1 KM Fee (₹)", value=20.0)
-                b2 = st.number_input("2 KM Fee (₹)", value=30.0)
-                pe = st.number_input("Extra KM Fee (₹)", value=10.0)
+                f_del = st.checkbox("Free Delivery above Rs 500", value=True)
+                b1 = st.number_input("1 KM Fee (Rs)", value=20.0)
+                b2 = st.number_input("2 KM Fee (Rs)", value=30.0)
+                pe = st.number_input("Extra KM Fee (Rs)", value=10.0)
 
             if st.form_submit_button("✅ Register Store / Agency Online"):
                 if name and city:
                     conn_r = sqlite3.connect(DB_NAME)
-                    conn_r.execute('''
+                    conn_r.execute(\'\'\'
                         INSERT INTO vendors (name, phone, upi_id, gstin, rera_id, is_kyc_verified, is_sponsored, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
                         VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (name, phone, upi, gstin, rera, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
+                    \'\'\', (name, phone, upi, gstin, rera, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
                     conn_r.commit()
                     conn_r.close()
                     st.success(f"🎉 '{name}' successfully registered!")
@@ -1008,7 +1061,7 @@ elif menu == "🏬 Register New Store / Agency":
     with ob_tab2:
         with st.form("rider_reg_form"):
             r_name = st.text_input("Rider Full Name", placeholder="Ramesh Patil")
-            r_phone = st.text_input("Rider WhatsApp Phone Number", placeholder="919876540002")
+            r_phone = st.text_input("Rider WhatsApp Phone Number", placeholder="919876500002")
             r_city = st.text_input("City of Operation", value="Nagpur")
             r_veh = st.text_input("Vehicle Number / Mode", placeholder="MH-31-CD-5678")
             if st.form_submit_button("🛵 Register as Delivery Partner"):
@@ -1024,7 +1077,7 @@ elif menu == "🏬 Register New Store / Agency":
                         st.error("Phone number already registered.")
 
 # -----------------------------------------------------------
-# TAB 10: PLATFORM EARNINGS & TAX LEDGER
+# TAB 11: PLATFORM EARNINGS & TAX LEDGER
 # -----------------------------------------------------------
 else:
     st.subheader("📊 Platform Revenue, Tax Compliance & 1% Pure Cut")
@@ -1038,9 +1091,9 @@ else:
     total_gst_liability = orders_df["platform_gst_18pct"].sum() if not orders_df.empty else 0.0
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Gross Deal Turnover", f"₹{total_gross:,.2f}")
-    m2.metric("Pure 1% Platform Cut", f"₹{total_comm:,.2f}", delta="Your SaaS Income")
-    m3.metric("GST Liability (18% on Fee)", f"₹{total_gst_liability:,.2f}")
+    m1.metric("Gross Deal Turnover", f"Rs {total_gross:,.2f}")
+    m2.metric("Pure 1% Platform Cut", f"Rs {total_comm:,.2f}", delta="Your SaaS Income")
+    m3.metric("GST Liability (18% on Fee)", f"Rs {total_gst_liability:,.2f}")
     m4.metric("Pending Payouts", len(settle_all))
 
     st.markdown("---")
@@ -1061,7 +1114,7 @@ else:
         if not settle_all.empty:
             for _, s_row in settle_all.iterrows():
                 with st.container(border=True):
-                    st.write(f"**Vendor #{s_row['vendor_id']}** requested **₹{s_row['amount']:,.2f}** to `{s_row['upi_id']}`")
+                    st.write(f"**Vendor #{s_row['vendor_id']}** requested **Rs {s_row['amount']:,.2f}** to `{s_row['upi_id']}`")
                     if st.button(f"Mark Paid (Settled)", key=f"payout_btn_{s_row['id']}"):
                         conn_ap = sqlite3.connect(DB_NAME)
                         conn_ap.execute("UPDATE settlements SET status = 'Settled' WHERE id = ?", (s_row['id'],))
@@ -1071,3 +1124,5 @@ else:
                         st.rerun()
         else:
             st.success("No pending settlement requests!")
+'''
+}
