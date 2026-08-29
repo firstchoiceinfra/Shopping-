@@ -21,13 +21,13 @@ st.set_page_config(
 DB_NAME = "hyperlocal_market.db"
 
 # -----------------------------------------------------------
-# 1. DATABASE SETUP & ROBUST MIGRATION HELPER
+# 1. DATABASE SETUP & COMPLETE SCHEMA MIGRATION HELPER
 # -----------------------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # Vendors Table
+    # 1. Vendors Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS vendors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +61,7 @@ def init_db():
     if "gstin" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN gstin TEXT DEFAULT 'NON-GST'")
 
-    # Riders Table
+    # 2. Riders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS riders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +74,7 @@ def init_db():
         )
     ''')
 
-    # Products Table
+    # 3. Products Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +102,46 @@ def init_db():
     if "image_url" not in prod_cols:
         c.execute("ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''")
 
-    # Site Visit Bookings Table
+    # 4. Orders Table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_name TEXT,
+            customer_phone TEXT,
+            vendor_id INTEGER,
+            rider_id INTEGER DEFAULT 0,
+            delivery_otp TEXT DEFAULT '1234',
+            items_summary TEXT DEFAULT '',
+            item_price REAL DEFAULT 0.0,
+            amount_paid_now REAL DEFAULT 0.0,
+            discount_amount REAL DEFAULT 0.0,
+            delivery_fee REAL DEFAULT 0.0,
+            grand_total REAL DEFAULT 0.0,
+            platform_commission_1pct REAL DEFAULT 0.0,
+            platform_gst_18pct REAL DEFAULT 0.0,
+            vendor_net_payout REAL DEFAULT 0.0,
+            distance_km REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'Order Placed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Auto-Migration for Orders (Checks missing columns in existing db)
+    order_cols = [col[1] for col in c.execute("PRAGMA table_info(orders)").fetchall()]
+    if "delivery_otp" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN delivery_otp TEXT DEFAULT '1234'")
+    if "items_summary" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN items_summary TEXT DEFAULT ''")
+    if "amount_paid_now" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN amount_paid_now REAL DEFAULT 0.0")
+    if "rider_id" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN rider_id INTEGER DEFAULT 0")
+    if "discount_amount" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0")
+    if "platform_gst_18pct" not in order_cols:
+        c.execute("ALTER TABLE orders ADD COLUMN platform_gst_18pct REAL DEFAULT 0.0")
+
+    # 5. Site Visit Bookings Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS site_visits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,7 +156,7 @@ def init_db():
         )
     ''')
 
-    # Coupons Table
+    # 6. Coupons Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS coupons (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,31 +167,7 @@ def init_db():
         )
     ''')
 
-    # Orders Table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_name TEXT,
-            customer_phone TEXT,
-            vendor_id INTEGER,
-            rider_id INTEGER DEFAULT 0,
-            delivery_otp TEXT,
-            items_summary TEXT,
-            item_price REAL,
-            amount_paid_now REAL,
-            discount_amount REAL DEFAULT 0.0,
-            delivery_fee REAL,
-            grand_total REAL,
-            platform_commission_1pct REAL,
-            platform_gst_18pct REAL,
-            vendor_net_payout REAL,
-            distance_km REAL,
-            status TEXT DEFAULT 'Order Placed',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    # Reviews Table
+    # 7. Reviews Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS reviews (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +179,7 @@ def init_db():
         )
     ''')
 
-    # Chat Messages Table
+    # 8. Chat Messages Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,7 +190,7 @@ def init_db():
         )
     ''')
 
-    # Settlements Table
+    # 9. Settlements Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS settlements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,7 +202,7 @@ def init_db():
         )
     ''')
 
-    # Default Demo Data
+    # Default Seed Data
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
