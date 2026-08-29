@@ -13,10 +13,116 @@ from streamlit_js_eval import get_geolocation
 from fpdf import FPDF
 
 st.set_page_config(
-    page_title="Bharat All-in-One Hyperlocal Platform",
-    page_icon="🇮🇳",
+    page_title="Bharat Premium Hyperlocal Platform",
+    page_icon="👑",
     layout="wide"
 )
+
+# ==========================================
+# 💎 PREMIUM LUXURY CSS INJECTION
+# ==========================================
+st.markdown("""
+<style>
+/* 1. Sidebar Background (Single Luxury Dark Color) */
+[data-testid="stSidebar"] {
+    background-color: #0b0f19 !important;
+}
+
+/* Sidebar Title - Premium Gold */
+[data-testid="stSidebar"] h1 {
+    color: #E5B80B !important; 
+    font-family: 'Georgia', serif !important;
+    letter-spacing: 1.5px;
+    text-shadow: 0px 2px 4px rgba(229, 184, 11, 0.3);
+}
+
+/* 2. Menu Text Multi-Color Logic */
+div[role="radiogroup"] > label:nth-child(1) p { color: #FFD700 !important; font-weight: 600; font-size: 16px; } /* Gold */
+div[role="radiogroup"] > label:nth-child(2) p { color: #00FA9A !important; font-weight: 600; font-size: 16px; } /* Spring Green */
+div[role="radiogroup"] > label:nth-child(3) p { color: #FF69B4 !important; font-weight: 600; font-size: 16px; } /* Hot Pink */
+div[role="radiogroup"] > label:nth-child(4) p { color: #00BFFF !important; font-weight: 600; font-size: 16px; } /* Sky Blue */
+div[role="radiogroup"] > label:nth-child(5) p { color: #FF7F50 !important; font-weight: 600; font-size: 16px; } /* Coral */
+div[role="radiogroup"] > label:nth-child(6) p { color: #DDA0DD !important; font-weight: 600; font-size: 16px; } /* Plum */
+div[role="radiogroup"] > label:nth-child(7) p { color: #F0E68C !important; font-weight: 600; font-size: 16px; } /* Khaki */
+div[role="radiogroup"] > label:nth-child(8) p { color: #20B2AA !important; font-weight: 600; font-size: 16px; } /* Sea Green */
+div[role="radiogroup"] > label:nth-child(9) p { color: #FF6347 !important; font-weight: 600; font-size: 16px; } /* Tomato */
+div[role="radiogroup"] > label:nth-child(10) p { color: #87CEFA !important; font-weight: 600; font-size: 16px; } /* Light Sky Blue */
+div[role="radiogroup"] > label:nth-child(11) p { color: #FFE4B5 !important; font-weight: 600; font-size: 16px; } /* Moccasin */
+
+/* Hide default radio circle for cleaner look */
+div[role="radiogroup"] > label span[data-baseweb="radio"] {
+    border-color: #E5B80B !important;
+    background-color: transparent !important;
+}
+div[role="radiogroup"] > label span[data-baseweb="radio"] div {
+    background-color: #E5B80B !important;
+}
+
+/* 3. Premium Main Page Background */
+.stApp {
+    background: linear-gradient(135deg, #f6f8fd 0%, #f1f6f9 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 4. Luxury 3D Cards (Glassmorphism + Gold Accents) */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 18px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06) !important;
+    border: 1px solid rgba(229, 184, 11, 0.4) !important; /* Gold Border */
+    background: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    padding: 10px;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 32px rgba(229, 184, 11, 0.15) !important; /* Gold Glow on hover */
+    border: 1px solid rgba(229, 184, 11, 0.9) !important;
+}
+
+/* 5. Premium Gold/Blue Buttons */
+.stButton > button {
+    background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
+    color: #ffffff !important;
+    border-radius: 30px !important;
+    border: none !important;
+    font-weight: bold !important;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4) !important;
+    transition: all 0.3s ease !important;
+}
+.stButton > button:hover {
+    background: linear-gradient(135deg, #AA7C11 0%, #D4AF37 100%) !important;
+    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.6) !important;
+    transform: scale(1.03);
+}
+
+/* Primary Buttons (Dark Royal Blue) */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+    box-shadow: 0 4px 15px rgba(30, 60, 114, 0.4) !important;
+}
+.stButton > button[kind="primary"]:hover {
+    box-shadow: 0 6px 20px rgba(30, 60, 114, 0.6) !important;
+}
+
+/* Elegant Headers */
+h1, h2, h3 {
+    font-family: 'Georgia', serif !important;
+    color: #1a202c !important;
+    text-shadow: 0px 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Stylish Alerts */
+.stAlert {
+    border-radius: 12px !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+# ==========================================
+
 
 DB_NAME = "hyperlocal_market.db"
 PLATFORM_UPI_ID = "adminplatform@upi"
@@ -53,7 +159,7 @@ def init_db():
         FOREIGN KEY (vendor_id) REFERENCES vendors (id)
     )''')
 
-    # 4. Orders (Updated for Location & UPI on Delivery)
+    # 4. Orders
     c.execute('''CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT, customer_phone TEXT, delivery_address TEXT, vendor_id INTEGER,
         rider_id INTEGER DEFAULT 0, delivery_otp TEXT DEFAULT '1234', items_summary TEXT DEFAULT '',
@@ -154,28 +260,27 @@ def generate_pdf_invoice(bill_data):
 # -----------------------------------------------------------
 # 3. SIDEBAR NAVIGATION
 # -----------------------------------------------------------
-st.sidebar.title("🇮🇳 Bharat Platform")
+st.sidebar.title("👑 Bharat Premium")
 menu = st.sidebar.radio("Navigation Menu", [
     "🛍️ Customer Marketplace",
     "🛒 Cart & Checkout",
     "📅 Scheduled Site Visits",
     "🚚 Track My Orders & Chat",
     "🏪 Vendor Terminal",
-    "🛵 Rider Terminal (UPI Collection)",
+    "🛵 Rider Terminal (UPI)",
     "🪧 Vendor QR Standee",
     "💳 Vendor Wallet & Refund",
     "📦 Add Product / Property",
-    "🏬 Register New Store / Rider",
+    "🏬 Register New Store",
     "📊 Platform Earnings Ledger"
 ])
 
 # -----------------------------------------------------------
-# TAB 1: CUSTOMER MARKETPLACE (Location & UPI on Delivery)
+# TAB 1: CUSTOMER MARKETPLACE
 # -----------------------------------------------------------
 if menu == "🛍️ Customer Marketplace":
-    st.subheader("📍 Discover Nearby Stores & Properties")
+    st.markdown("<h2>📍 Discover Premium Stores & Properties</h2>", unsafe_allow_html=True)
     
-    # Custom Location Logic
     loc_mode = st.radio("Choose Delivery Location Method:", ["📍 Auto-Detect (Current GPS)", "🏠 Enter Manual Location"], horizontal=True)
     
     detected_lat, detected_lon = 21.1458, 79.0882
@@ -277,7 +382,7 @@ if menu == "🛍️ Customer Marketplace":
                         with b_col2:
                             loc_confirm = st.checkbox("📍 I confirm my delivery location map.", key=f"loc_{item['p_id']}")
                             if loc_confirm:
-                                btn_label = f"🔒 Book Advance (Rs {item['advance_token']:,.2f})" if item["is_high_val"] == 1 else f"🚀 Order Now (Rs {item['price']+final_fee:,.2f})"
+                                btn_label = f"🔒 Book Advance (Rs {item['advance_token']:,.2f})" if item["is_high_val"] == 1 else f"🚀 Order Now"
                                 if st.button(btn_label, key=f"btn_{item['p_id']}"):
                                     grand_total = pay_now + final_fee
                                     gen_otp = str(random.randint(1000, 9999))
@@ -305,7 +410,7 @@ if menu == "🛍️ Customer Marketplace":
         q1, q2 = st.columns([1, 1])
         with q1:
             st.markdown("### 💳 Payment Pending (UPI on Delivery)")
-            st.info(f"आपको डिलीवरी के समय **Rs {b['total']:,.2f}** का पेमेंट सीधे दुकानदार के UPI पर करना होगा। डिलीवरी बॉय आपको QR कोड दिखाएगा।")
+            st.info(f"आपको डिलीवरी के समय **Rs {b['total']:,.2f}** का पेमेंट सीधे दुकानदार के UPI पर करना होगा।")
             st.warning(f"🔒 **Your Secret Delivery OTP:** `{b['otp']}` (पेमेंट करने के बाद डिलीवरी बॉय/स्टोर को दें)")
         with q2:
             pdf_bytes = generate_pdf_invoice(b)
@@ -315,7 +420,7 @@ if menu == "🛍️ Customer Marketplace":
 # TAB 2: MULTI-ITEM CART & CHECKOUT
 # -----------------------------------------------------------
 elif menu == "🛒 Cart & Checkout":
-    st.subheader("🛒 Your Shopping Cart (Checkout)")
+    st.markdown("<h2>🛒 Your Shopping Cart (Checkout)</h2>", unsafe_allow_html=True)
     if st.session_state.cart:
         cart_df = pd.DataFrame(st.session_state.cart)
         st.dataframe(cart_df[["brand", "title", "price", "v_name", "distance"]], use_container_width=True)
@@ -368,7 +473,7 @@ elif menu == "🛒 Cart & Checkout":
 # TAB 3: SCHEDULED SITE VISITS
 # -----------------------------------------------------------
 elif menu == "📅 Scheduled Site Visits":
-    st.subheader("📅 Customer Site Visits & Consultation Schedule")
+    st.markdown("<h2>📅 Customer Site Visits & Consultation Schedule</h2>", unsafe_allow_html=True)
     conn_v = sqlite3.connect(DB_NAME)
     sv_df = pd.read_sql_query('SELECT sv.id, sv.customer_name, sv.customer_phone, sv.visit_date, sv.visit_time, sv.status, p.brand, p.title, v.name as firm_name FROM site_visits sv JOIN products p ON sv.product_id = p.id JOIN vendors v ON sv.vendor_id = v.id ORDER BY sv.created_at DESC', conn_v)
     conn_v.close()
@@ -379,7 +484,7 @@ elif menu == "📅 Scheduled Site Visits":
 # TAB 4: TRACK MY ORDERS & CHAT
 # -----------------------------------------------------------
 elif menu == "🚚 Track My Orders & Chat":
-    st.subheader("🚚 Track Orders, Rate Store & Direct Chat")
+    st.markdown("<h2>🚚 Track Orders, Rate Store & Direct Chat</h2>", unsafe_allow_html=True)
     t_phone = st.text_input("Enter your Registered WhatsApp Phone Number:", value="919876500000")
     conn = sqlite3.connect(DB_NAME)
     my_orders = pd.read_sql_query('SELECT o.*, v.name as shop_name, v.phone as shop_phone FROM orders o JOIN vendors v ON o.vendor_id = v.id WHERE o.customer_phone = ? ORDER BY o.created_at DESC', conn, params=(t_phone,))
@@ -427,10 +532,10 @@ elif menu == "🚚 Track My Orders & Chat":
     conn.close()
 
 # -----------------------------------------------------------
-# TAB 5: VENDOR TERMINAL (WITH NOTIFICATIONS & DISPATCH LOGIC)
+# TAB 5: VENDOR TERMINAL
 # -----------------------------------------------------------
 elif menu == "🏪 Vendor Terminal":
-    st.subheader("🔔 Store Orders & Fulfillment Dashboard")
+    st.markdown("<h2>🔔 Store Orders & Fulfillment Dashboard</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     
@@ -473,17 +578,16 @@ elif menu == "🏪 Vendor Terminal":
                                 conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ord_row['id'],))
                                 conn.commit(); st.rerun()
 
-                        # Check for System Notifications (like Payment Success)
                         msgs = pd.read_sql_query("SELECT message_text FROM messages WHERE order_id = ? AND sender_name = 'System'", conn, params=(ord_row['id'],))
                         for _, m in msgs.iterrows(): st.info(m['message_text'])
         else: st.info("No orders received yet for this store.")
     conn.close()
 
 # -----------------------------------------------------------
-# TAB 6: RIDER TERMINAL (UPI COLLECTION & SECURITY LIMIT)
+# TAB 6: RIDER TERMINAL
 # -----------------------------------------------------------
-elif menu == "🛵 Rider Terminal (UPI Collection)":
-    st.subheader("🛵 Delivery Partner Dashboard (UPI Collection)")
+elif menu == "🛵 Rider Terminal (UPI)":
+    st.markdown("<h2>🛵 Delivery Partner Dashboard (UPI Collection)</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     riders_df = pd.read_sql_query("SELECT * FROM riders WHERE status = 'Active'", conn)
     
@@ -532,12 +636,10 @@ elif menu == "🛵 Rider Terminal (UPI Collection)":
                             qr_bytes = generate_upi_qr(ro['shop_upi'], ro['shop_name'], ro['grand_total'], f"Order_{ro['id']}")
                             st.image(qr_bytes, width=200)
                             
-                            otp_in = st.text_input("Enter Customer 4-Digit OTP", key=f"otp_{ro['id']}")
+                            otp_in = st.text_input("Customer 4-Digit OTP", key=f"otp_{ro['id']}")
                             if st.button("✅ Verify OTP & Mark Complete", key=f"comp_{ro['id']}"):
                                 if otp_in == str(ro['delivery_otp']):
-                                    # Mark Delivered
                                     conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ro['id'],))
-                                    # Send Notification to Vendor
                                     msg = f"✅ Payment of Rs {ro['grand_total']:,.2f} Collected via Rider ({curr_rider['name']}) directly through UPI."
                                     conn.execute("INSERT INTO messages (order_id, sender_name, message_text) VALUES (?, 'System', ?)", (ro['id'], msg))
                                     conn.commit()
@@ -550,7 +652,7 @@ elif menu == "🛵 Rider Terminal (UPI Collection)":
 # TAB 7: VENDOR QR STANDEE
 # -----------------------------------------------------------
 elif menu == "🪧 Vendor QR Standee":
-    st.subheader("🪧 Download Official Store Standee QR (For Counter Display)")
+    st.markdown("<h2>🪧 Download Official Store Standee QR</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
@@ -562,10 +664,10 @@ elif menu == "🪧 Vendor QR Standee":
         st.download_button("🖨️ Download PDF Counter Standee", data=bytes(standee_pdf_bytes), file_name=f"Standee_{curr_v['name'].replace(' ', '_')}.pdf", mime="application/pdf")
 
 # -----------------------------------------------------------
-# TAB 8: VENDOR WALLET & REFUND (WITH 2% DYNAMIC FEE)
+# TAB 8: VENDOR WALLET & REFUND
 # -----------------------------------------------------------
 elif menu == "💳 Vendor Wallet & Refund":
-    st.subheader("💳 Store Personal Wallet & Refund Manager")
+    st.markdown("<h2>💳 Store Personal Wallet & Refund Manager</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
@@ -586,7 +688,6 @@ elif menu == "💳 Vendor Wallet & Refund":
                 st.caption("⚠️ **नोट:** विथड्रॉल पर 2% (न्यूनतम ₹3) बैंक और प्लेटफ़ॉर्म प्रोसेसिंग चार्ज काटा जाएगा।")
                 
                 withdraw_request = curr_vendor['wallet_balance']
-                # ⚡ 2% OR MIN RS 3 LOGIC
                 processing_fee = max(round(withdraw_request * 0.02, 2), 3.0)
                 
                 if withdraw_request > processing_fee:
@@ -634,7 +735,7 @@ elif menu == "💳 Vendor Wallet & Refund":
 # TAB 9: ADD PRODUCT / PROPERTY LISTING
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Property":
-    st.subheader("📦 Product & Real Estate Listing Management")
+    st.markdown("<h2>📦 Product & Real Estate Listing Management</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
@@ -677,8 +778,8 @@ elif menu == "📦 Add Product / Property":
 # -----------------------------------------------------------
 # TAB 10: REGISTER NEW STORE / RIDER
 # -----------------------------------------------------------
-elif menu == "🏬 Register New Store / Rider":
-    st.subheader("🏬 Enterprise & Rider Onboarding Portal")
+elif menu == "🏬 Register New Store":
+    st.markdown("<h2>🏬 Enterprise & Rider Onboarding Portal</h2>", unsafe_allow_html=True)
     ob_tab1, ob_tab2 = st.tabs(["🏪 Register Shop", "🛵 Register Rider"])
     
     with ob_tab1:
@@ -724,7 +825,7 @@ elif menu == "🏬 Register New Store / Rider":
 # TAB 11: PLATFORM EARNINGS LEDGER & ADMIN APPROVALS
 # -----------------------------------------------------------
 else:
-    st.subheader("📊 Platform Admin Panel: 1% Earnings & Withdrawals")
+    st.markdown("<h2>📊 Platform Admin Panel: 1% Earnings & Withdrawals</h2>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     orders_df = pd.read_sql_query("SELECT * FROM orders ORDER BY created_at DESC", conn)
     pending_withdrawals = pd.read_sql_query("SELECT * FROM wallet_logs WHERE status = 'Pending Admin Approval'", conn)
