@@ -3,6 +3,7 @@ import sqlite3
 import math
 import random
 import urllib.parse
+import os
 import pandas as pd
 import folium
 import qrcode
@@ -20,13 +21,13 @@ st.set_page_config(
 DB_NAME = "hyperlocal_market.db"
 
 # -----------------------------------------------------------
-# 1. DATABASE SCHEMA & INITIALIZATION
+# 1. DATABASE SETUP & MIGRATION HELPER
 # -----------------------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # Vendors Table with e-KYC & Sponsored Badge
+    # Vendors Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS vendors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,6 +51,17 @@ def init_db():
         )
     ''')
 
+    # Safe Schema Migrations for Vendors (agar purani file ho to columns add ho jayein)
+    vendor_cols = [col[1] for col in c.execute("PRAGMA table_info(vendors)").fetchall()]
+    if "rera_id" not in vendor_cols:
+        c.execute("ALTER TABLE vendors ADD COLUMN rera_id TEXT DEFAULT 'N/A'")
+    if "is_kyc_verified" not in vendor_cols:
+        c.execute("ALTER TABLE vendors ADD COLUMN is_kyc_verified INTEGER DEFAULT 1")
+    if "is_sponsored" not in vendor_cols:
+        c.execute("ALTER TABLE vendors ADD COLUMN is_sponsored INTEGER DEFAULT 0")
+    if "gstin" not in vendor_cols:
+        c.execute("ALTER TABLE vendors ADD COLUMN gstin TEXT DEFAULT 'NON-GST'")
+
     # Delivery Partners Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS riders (
@@ -63,7 +75,7 @@ def init_db():
         )
     ''')
 
-    # Products & High-Value Deals Table
+    # Products Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,14 +86,24 @@ def init_db():
             price REAL NOT NULL,
             is_high_value INTEGER DEFAULT 0,
             advance_booking_amount REAL DEFAULT 0.0,
-            video_url TEXT,
-            image_url TEXT,
+            video_url TEXT DEFAULT '',
+            image_url TEXT DEFAULT '',
             description TEXT,
             FOREIGN KEY (vendor_id) REFERENCES vendors (id)
         )
     ''')
 
-    # Site Visit Bookings Table (Real Estate / Auto)
+    prod_cols = [col[1] for col in c.execute("PRAGMA table_info(products)").fetchall()]
+    if "is_high_value" not in prod_cols:
+        c.execute("ALTER TABLE products ADD COLUMN is_high_value INTEGER DEFAULT 0")
+    if "advance_booking_amount" not in prod_cols:
+        c.execute("ALTER TABLE products ADD COLUMN advance_booking_amount REAL DEFAULT 0.0")
+    if "video_url" not in prod_cols:
+        c.execute("ALTER TABLE products ADD COLUMN video_url TEXT DEFAULT ''")
+    if "image_url" not in prod_cols:
+        c.execute("ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''")
+
+    # Site Visit Bookings Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS site_visits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,7 +129,7 @@ def init_db():
         )
     ''')
 
-    # Orders Table with OTP & 1% Platform Split Breakdown
+    # Orders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,7 +188,7 @@ def init_db():
         )
     ''')
 
-    # Default Demo Data
+    # Check & seed default items
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
@@ -180,8 +202,8 @@ def init_db():
             VALUES 
             (1, 'Tata Tea', 'Tata Tea Premium 250g', 'Grocery', 50.0, 0, 0.0, '', 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=500&auto=format&fit=crop&q=60', 'Fresh daily morning tea'),
             (1, 'Fortune', 'Refined Sunflower Oil 5L', 'Grocery', 680.0, 0, 0.0, '', 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=500&auto=format&fit=crop&q=60', 'Pure cooking oil pack'),
-            (2, 'Sai Samruddhi City', 'Residential NA Plot 1200 Sq.Ft.', 'Real Estate', 1500000.0, 1, 21000.0, 'https://www.w3schools.com/html/mov_bbb.mp4', 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=500&auto=format&fit=crop&q=60', 'NMRDA Sanctioned RL plot with cement road, water & transformer line'),
-            (2, 'Mahindra', 'Scorpio-N Diesel Z8 L 4x2', 'Automobile', 2150000.0, 1, 25000.0, '', 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=500&auto=format&fit=crop&q=60', 'Brand new vehicle VIP booking slot with instant allocation')
+            (2, 'Sai Samruddhi City', 'Residential NA Plot 1200 Sq.Ft.', 'Real Estate', 1500000.0, 1, 21000.0, '', 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=500&auto=format&fit=crop&q=60', 'NMRDA Sanctioned RL plot with cement road, water & electricity'),
+            (2, 'Mahindra', 'Scorpio-N Diesel Z8 L 4x2', 'Automobile', 2150000.0, 1, 25000.0, '', 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=500&auto=format&fit=crop&q=60', 'Brand new vehicle VIP booking slot')
         ''')
         c.execute('''
             INSERT INTO coupons (code, discount_pct, min_order_value, is_active)
@@ -201,7 +223,7 @@ if "cart" not in st.session_state:
     st.session_state.cart = []
 
 # -----------------------------------------------------------
-# 2. HELPER FUNCTIONS: DISTANCE, DELIVERY & PDF
+# 2. HELPER FUNCTIONS
 # -----------------------------------------------------------
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -234,31 +256,6 @@ def generate_upi_qr(upi_id, payee_name, amount, note):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
-
-def generate_standee_pdf(vendor):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 20)
-    pdf.cell(0, 15, "BHARAT DIGITAL NETWORK", ln=True, align="C")
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, f"OFFICIAL STORE: {vendor['name']}", ln=True, align="C")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Address: {vendor['address']}, {vendor['city']} | GST: {vendor['gstin']} | RERA: {vendor['rera_id']}", ln=True, align="C")
-    pdf.line(10, 45, 200, 45)
-    pdf.ln(12)
-
-    qr_bytes = generate_upi_qr(vendor["upi_id"], vendor["name"], 0.0, "Store Purchase")
-    qr_img = io.BytesIO(qr_bytes)
-    pdf.image(qr_img, x=65, y=55, w=80)
-    
-    pdf.set_y(145)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, f"UPI ID: {vendor['upi_id']}", ln=True, align="C")
-    pdf.set_font("Helvetica", "I", 11)
-    pdf.cell(0, 8, "Scan with PhonePe, GPay, Paytm or Bharat App to order instantly", ln=True, align="C")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 8, "All transactions secured with Automated 1% Digital Billing Receipt", ln=True, align="C")
-    return pdf.output()
 
 def generate_pdf_invoice(bill_data):
     pdf = FPDF()
@@ -315,7 +312,6 @@ menu = st.sidebar.radio("Navigation Menu", [
     "🚚 Track My Orders & Chat",
     "🛵 Delivery Partner / Rider Mode",
     "🏪 Vendor Terminal & Orders",
-    "🪧 Vendor QR Standee (Print)",
     "💰 Vendor Settlement & Wallet",
     "📦 Add Product / Property Listing",
     "🏬 Register New Store / Agency",
@@ -417,7 +413,6 @@ if menu == "🛍️ Customer Marketplace":
             "fee_desc": fee_desc
         })
 
-    # Sort sponsored shops first, then by nearest road distance
     results.sort(key=lambda x: (-x["v_sponsored"], x["distance"]))
 
     if results:
@@ -442,8 +437,6 @@ if menu == "🛍️ Customer Marketplace":
                     img_col, info_col = st.columns([1, 2])
                     with img_col:
                         st.image(item["image_url"], use_container_width=True)
-                        if item["video_url"]:
-                            st.video(item["video_url"])
                     with info_col:
                         st.markdown(f"### {item['brand']} - {item['title']}")
                         
@@ -464,8 +457,7 @@ if menu == "🛍️ Customer Marketplace":
                     b_col1, b_col2 = st.columns(2)
                     with b_col1:
                         if item["is_high_val"] == 1:
-                            # Site Visit Booking Modal
-                            with st.popover("📅 Book Free Site Visit"):
+                            with st.popover("📅 Book Site Visit"):
                                 v_date = st.date_input("Select Date", key=f"date_{item['p_id']}")
                                 v_time = st.selectbox("Select Time Slot", ["10:00 AM", "12:00 PM", "03:00 PM", "05:00 PM"], key=f"time_{item['p_id']}")
                                 if st.button("Confirm Site Visit", key=f"sv_btn_{item['p_id']}"):
@@ -524,7 +516,7 @@ if menu == "🛍️ Customer Marketplace":
                                 "distance": item["distance"]
                             }
 
-    # Invoice, Split & Dynamic UPI QR Section
+    # Invoice & QR Section
     if "current_bill" in st.session_state:
         b = st.session_state.current_bill
         st.markdown("---")
@@ -632,7 +624,7 @@ elif menu == "🛒 Multi-Item Cart & Checkout":
         st.info("Your cart is currently empty. Browse products in the Customer Marketplace!")
 
 # -----------------------------------------------------------
-# TAB 3: SCHEDULED SITE VISITS (Property & High-Value)
+# TAB 3: SCHEDULED SITE VISITS
 # -----------------------------------------------------------
 elif menu == "📅 Scheduled Site Visits (Property)":
     st.subheader("📅 Customer Site Visits & Consultation Schedule")
@@ -653,7 +645,7 @@ elif menu == "📅 Scheduled Site Visits (Property)":
         st.info("No site visits scheduled yet.")
 
 # -----------------------------------------------------------
-# TAB 4: TRACK MY ORDERS, REVIEWS & CHAT
+# TAB 4: TRACK MY ORDERS & CHAT
 # -----------------------------------------------------------
 elif menu == "🚚 Track My Orders & Chat":
     st.subheader("🚚 Track Orders, Rate Store & Direct Chat")
@@ -841,20 +833,6 @@ elif menu == "🏪 Vendor Terminal & Orders":
         new_orders = v_orders[v_orders["status"] == "Order Placed"]
         if not new_orders.empty:
             st.error(f"🚨 **{len(new_orders)} New Pending Order(s) Received!**")
-            st.components.v1.html("""
-                <script>
-                var context = new (window.AudioContext || window.webkitAudioContext)();
-                var osc = context.createOscillator();
-                var gain = context.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = 880;
-                gain.gain.value = 0.2;
-                osc.connect(gain);
-                gain.connect(context.destination);
-                osc.start();
-                setTimeout(function(){ osc.stop(); }, 600);
-                </script>
-            """, height=0)
 
         st.write("### Recent Orders Table:")
         if not v_orders.empty:
@@ -887,35 +865,7 @@ elif menu == "🏪 Vendor Terminal & Orders":
             st.info("No orders received yet for this store.")
 
 # -----------------------------------------------------------
-# TAB 7: VENDOR QR STANDEE (Printable PDF)
-# -----------------------------------------------------------
-elif menu == "🪧 Vendor QR Standee (Print)":
-    st.subheader("🪧 Download Official Store Standee QR (For Counter Display)")
-    
-    conn = sqlite3.connect(DB_NAME)
-    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
-    conn.close()
-
-    if not vendors_df.empty:
-        selected_vid = st.selectbox(
-            "Select Shop for Standee Generation",
-            vendors_df["id"].tolist(),
-            format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0]
-        )
-        curr_v = vendors_df[vendors_df["id"] == selected_vid].iloc[0]
-
-        st.info(f"Generating Standee for **{curr_v['name']}** (UPI: `{curr_v['upi_id']}`) | GST: `{curr_v['gstin']}` | RERA: `{curr_v['rera_id']}`")
-        standee_pdf_bytes = generate_standee_pdf(curr_v)
-
-        st.download_button(
-            label="🖨️ Download Printable PDF Counter Standee",
-            data=bytes(standee_pdf_bytes),
-            file_name=f"Standee_{curr_v['name'].replace(' ', '_')}.pdf",
-            mime="application/pdf"
-        )
-
-# -----------------------------------------------------------
-# TAB 8: VENDOR SETTLEMENT & WALLET
+# TAB 7: VENDOR SETTLEMENT & WALLET
 # -----------------------------------------------------------
 elif menu == "💰 Vendor Settlement & Wallet":
     st.subheader("💰 Vendor Wallet & Bank Settlement Engine")
@@ -963,7 +913,7 @@ elif menu == "💰 Vendor Settlement & Wallet":
             st.dataframe(settle_df, use_container_width=True)
 
 # -----------------------------------------------------------
-# TAB 9: ADD PRODUCT / PROPERTY LISTING
+# TAB 8: ADD PRODUCT / PROPERTY LISTING
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Property Listing":
     st.subheader("📦 Product & Real Estate Listing Management")
@@ -1018,7 +968,7 @@ elif menu == "📦 Add Product / Property Listing":
                     st.rerun()
 
 # -----------------------------------------------------------
-# TAB 10: REGISTER NEW STORE / ENTERPRISE
+# TAB 9: REGISTER NEW STORE / AGENCY
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Store / Agency":
     st.subheader("🏬 Enterprise & Rider Onboarding Portal (PAN-India)")
@@ -1074,7 +1024,7 @@ elif menu == "🏬 Register New Store / Agency":
                         st.error("Phone number already registered.")
 
 # -----------------------------------------------------------
-# TAB 11: PLATFORM EARNINGS & TAX LEDGER
+# TAB 10: PLATFORM EARNINGS & TAX LEDGER
 # -----------------------------------------------------------
 else:
     st.subheader("📊 Platform Revenue, Tax Compliance & 1% Pure Cut")
