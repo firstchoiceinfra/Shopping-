@@ -128,7 +128,7 @@ def init_db():
         )
     ''')
 
-    # Orders Table with Barcode, GST & OTP
+    # Orders Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,7 +222,7 @@ if "cart" not in st.session_state:
     st.session_state.cart = []
 
 # -----------------------------------------------------------
-# 2. LOGIC FUNCTIONS
+# 2. HELPER FUNCTIONS
 # -----------------------------------------------------------
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -998,10 +998,10 @@ elif menu == "📦 Add Product / Property Listing":
             if st.form_submit_button("🚀 Publish Listing (Free)"):
                 if b_name and p_name:
                     conn_i = sqlite3.connect(DB_NAME)
-                    conn_i.execute(\'\'\'
+                    conn_i.execute('''
                         INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, video_url, image_url, description)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    \'\'\', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, vid_link, img_link, p_desc))
+                    ''', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, vid_link, img_link, p_desc))
                     conn_i.commit()
                     conn_i.close()
                     st.success(f"✅ '{b_name} - {p_name}' listed successfully!")
@@ -1050,10 +1050,10 @@ elif menu == "🏬 Register New Store / Agency":
             if st.form_submit_button("✅ Register Store / Agency Online"):
                 if name and city:
                     conn_r = sqlite3.connect(DB_NAME)
-                    conn_r.execute(\'\'\'
+                    conn_r.execute('''
                         INSERT INTO vendors (name, phone, upi_id, gstin, rera_id, is_kyc_verified, is_sponsored, city, address, lat, lon, free_delivery_above_500, base_1km, base_2km, per_km_extra)
                         VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-                    \'\'\', (name, phone, upi, gstin, rera, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
+                    ''', (name, phone, upi, gstin, rera, city, address, lat, lon, 1 if f_del else 0, b1, b2, pe))
                     conn_r.commit()
                     conn_r.close()
                     st.success(f"🎉 '{name}' successfully registered!")
@@ -1124,5 +1124,3 @@ else:
                         st.rerun()
         else:
             st.success("No pending settlement requests!")
-'''
-}
