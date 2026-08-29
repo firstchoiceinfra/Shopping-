@@ -12,14 +12,10 @@ from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
 from fpdf import FPDF
 
-st.set_page_config(
-    page_title="Bharat Premium Hyperlocal Platform",
-    page_icon="👑",
-    layout="wide"
-)
+st.set_page_config(page_title="Bharat Premium Hyperlocal", page_icon="👑", layout="wide")
 
 # ==========================================
-# 💎 PREMIUM LUXURY UI/UX INJECTION
+# 💎 PREMIUM LUXURY UI/UX & MULTI-COLOR TITLES
 # ==========================================
 st.markdown("""
 <style>
@@ -37,7 +33,7 @@ st.markdown("""
     text-shadow: 0px 2px 8px rgba(255, 215, 0, 0.4);
 }
 
-/* 2. Menu Buttons (Glassmorphism Tiles instead of colored text) */
+/* 2. Menu Buttons (Glassmorphism Tiles) */
 div[role="radiogroup"] > label p { 
     color: #F8FAFC !important; 
     font-weight: 500; 
@@ -59,14 +55,10 @@ div[role="radiogroup"] > label:hover {
     transform: translateX(5px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
-/* Hide default radio circle */
 div[role="radiogroup"] > label span[data-baseweb="radio"] { display: none !important; }
 
 /* 3. Main Page Background */
-.stApp {
-    background: #f4f6f9;
-    font-family: 'Segoe UI', Tahoma, Geneva, sans-serif;
-}
+.stApp { background: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; }
 
 /* 4. Luxury 3D Product Cards */
 div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -86,58 +78,53 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
 /* 5. Premium Buttons */
 .stButton > button {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
-    color: #ffffff !important;
-    border-radius: 30px !important;
-    border: none !important;
-    font-weight: 600 !important;
-    box-shadow: 0 4px 15px rgba(30, 60, 114, 0.3) !important;
+    color: #ffffff !important; border-radius: 30px !important; border: none !important;
+    font-weight: 600 !important; box-shadow: 0 4px 15px rgba(30, 60, 114, 0.3) !important;
     transition: all 0.3s ease !important;
 }
-.stButton > button:hover {
-    box-shadow: 0 6px 20px rgba(30, 60, 114, 0.5) !important;
-    transform: scale(1.02);
+.stButton > button:hover { transform: scale(1.02); }
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important; color: #111 !important;
 }
 
-/* Primary/Checkout Button in Gold */
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%) !important;
-    color: #111 !important;
-    font-size: 16px !important;
-    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4) !important;
-}
-.stButton > button[kind="primary"]:hover {
-    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.6) !important;
+/* 6. 🔥 BROAD MULTI-COLOR PREMIUM TITLE FOR ALL PAGES */
+.premium-title {
+    background: linear-gradient(90deg, #FF1493, #FF8C00, #FFD700, #00BFFF);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2.8rem;
+    font-weight: 900;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding-bottom: 15px;
+    letter-spacing: 1px;
+    text-shadow: 2px 2px 5px rgba(0,0,0,0.1);
 }
 </style>
 """, unsafe_allow_html=True)
 # ==========================================
 
-
 DB_NAME = "hyperlocal_market.db"
 PLATFORM_UPI_ID = "adminplatform@upi"
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+    conn = sqlite3.connect(DB_NAME); c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS vendors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT DEFAULT '919876543210',
-        upi_id TEXT DEFAULT 'merchant@upi', city TEXT NOT NULL, address TEXT, gstin TEXT DEFAULT 'NON-GST',
-        rera_id TEXT DEFAULT 'N/A', is_kyc_verified INTEGER DEFAULT 1, is_sponsored INTEGER DEFAULT 0,
-        lat REAL NOT NULL, lon REAL NOT NULL, rating REAL DEFAULT 4.8, wallet_balance REAL DEFAULT 150.0,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT DEFAULT '919876543210', upi_id TEXT DEFAULT 'merchant@upi',
+        city TEXT NOT NULL, address TEXT, gstin TEXT DEFAULT 'NON-GST', rera_id TEXT DEFAULT 'N/A', is_kyc_verified INTEGER DEFAULT 1,
+        is_sponsored INTEGER DEFAULT 0, lat REAL NOT NULL, lon REAL NOT NULL, rating REAL DEFAULT 4.8, wallet_balance REAL DEFAULT 150.0,
         free_delivery_above_500 INTEGER DEFAULT 1, base_1km REAL DEFAULT 20.0, base_2km REAL DEFAULT 30.0, per_km_extra REAL DEFAULT 10.0
     )''')
     vendor_cols = [col[1] for col in c.execute("PRAGMA table_info(vendors)").fetchall()]
     if "wallet_balance" not in vendor_cols: c.execute("ALTER TABLE vendors ADD COLUMN wallet_balance REAL DEFAULT 150.0")
 
-    c.execute('''CREATE TABLE IF NOT EXISTS riders (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT UNIQUE NOT NULL, city TEXT NOT NULL, vehicle_number TEXT, wallet_balance REAL DEFAULT 0.0, status TEXT DEFAULT 'Active')''')
-    c.execute('''CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, vendor_id INTEGER NOT NULL, brand TEXT NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL, is_high_value INTEGER DEFAULT 0, advance_booking_amount REAL DEFAULT 0.0, video_url TEXT DEFAULT '', image_url TEXT DEFAULT '', description TEXT, FOREIGN KEY (vendor_id) REFERENCES vendors (id))''')
+    c.execute("CREATE TABLE IF NOT EXISTS riders (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT UNIQUE NOT NULL, city TEXT NOT NULL, vehicle_number TEXT, wallet_balance REAL DEFAULT 0.0, status TEXT DEFAULT 'Active')")
+    c.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, vendor_id INTEGER NOT NULL, brand TEXT NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL, is_high_value INTEGER DEFAULT 0, advance_booking_amount REAL DEFAULT 0.0, video_url TEXT DEFAULT '', image_url TEXT DEFAULT '', description TEXT, FOREIGN KEY (vendor_id) REFERENCES vendors (id))")
     
     c.execute('''CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT, customer_phone TEXT, delivery_address TEXT, vendor_id INTEGER,
-        rider_id INTEGER DEFAULT 0, delivery_otp TEXT DEFAULT '1234', items_summary TEXT DEFAULT '',
-        item_price REAL DEFAULT 0.0, delivery_fee REAL DEFAULT 0.0, grand_total REAL DEFAULT 0.0, 
-        platform_commission_1pct REAL DEFAULT 0.0, distance_km REAL DEFAULT 0.0, delivery_mode TEXT DEFAULT 'Delivery', 
-        payment_status TEXT DEFAULT 'Pending (UPI on Delivery)', status TEXT DEFAULT 'Order Placed', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        rider_id INTEGER DEFAULT 0, delivery_otp TEXT DEFAULT '1234', items_summary TEXT DEFAULT '', item_price REAL DEFAULT 0.0,
+        delivery_fee REAL DEFAULT 0.0, grand_total REAL DEFAULT 0.0, platform_commission_1pct REAL DEFAULT 0.0, distance_km REAL DEFAULT 0.0,
+        delivery_mode TEXT DEFAULT 'Delivery', payment_status TEXT DEFAULT 'Pending (UPI on Delivery)', status TEXT DEFAULT 'Order Placed', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     order_cols = [col[1] for col in c.execute("PRAGMA table_info(orders)").fetchall()]
     if "delivery_address" not in order_cols: c.execute("ALTER TABLE orders ADD COLUMN delivery_address TEXT DEFAULT 'GPS Location'")
@@ -194,31 +181,22 @@ def generate_pdf_invoice(b):
 
 st.sidebar.title("👑 Bharat Premium")
 menu = st.sidebar.radio("Navigation Menu", [
-    "🛍️ Customer Marketplace",
-    "🛒 Cart & Checkout",
-    "📅 Scheduled Site Visits",
-    "🚚 Track My Orders & Chat",
-    "🏪 Vendor Terminal",
-    "🛵 Rider Terminal (UPI)",
-    "🪧 Vendor QR Standee",
-    "💳 Vendor Wallet & Refund",
-    "📦 Add Product / Property",
-    "🏬 Register New Store",
-    "📊 Admin Ledger"
+    "🛍️ Customer Marketplace", "🛒 Cart & Checkout", "📅 Scheduled Site Visits", "🚚 Track My Orders & Chat",
+    "🏪 Vendor Terminal", "🛵 Rider Terminal (UPI)", "🪧 Vendor QR Standee", "💳 Vendor Wallet & Refund",
+    "📦 Add Product / Property", "🏬 Register New Store", "📊 Admin Ledger"
 ])
 
 # -----------------------------------------------------------
-# TAB 1: CUSTOMER MARKETPLACE (Add to Cart Only)
+# TAB 1: CUSTOMER MARKETPLACE
 # -----------------------------------------------------------
 if menu == "🛍️ Customer Marketplace":
-    st.markdown("<h2>🛍️ Discover Premium Products & Stores</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-title'>🛍️ Discover Premium Products</div>", unsafe_allow_html=True)
     
     with st.container(border=True):
         st.markdown("#### 📍 Find Stores Near Your Location")
         col_m1, col_m2 = st.columns(2)
         with col_m1: detected_lat = st.number_input("Your Latitude", value=21.1458, format="%.4f")
         with col_m2: detected_lon = st.number_input("Your Longitude", value=79.0882, format="%.4f")
-    
     st.markdown("---")
     
     f1, f2 = st.columns([3, 1])
@@ -233,7 +211,6 @@ if menu == "🛍️ Customer Marketplace":
     for _, row in df.iterrows():
         if search_query and search_query.lower() not in row["title"].lower() and search_query.lower() not in row["brand"].lower(): continue
         if cat_filter != "All Categories" and row["category"] != cat_filter: continue
-
         dist = calculate_distance(detected_lat, detected_lon, row["v_lat"], row["v_lon"])
         fee, fee_desc = get_delivery_fee(dist, row["price"], row["free_delivery_above_500"], row["base_1km"], row["base_2km"], row["per_km_extra"])
         results.append({
@@ -244,14 +221,13 @@ if menu == "🛍️ Customer Marketplace":
     results.sort(key=lambda x: x["distance"])
 
     if results:
-        cols = st.columns(3) # 3 columns for premium grid look
+        cols = st.columns(3) 
         for idx, item in enumerate(results):
             with cols[idx % 3]:
                 with st.container(border=True):
                     st.image(item["image_url"], use_container_width=True)
                     st.markdown(f"### {item['title']}")
                     st.caption(f"🏪 **{item['v_name']}** | 📍 {item['distance']} KM")
-                    
                     if item["is_high_val"] == 1:
                         st.markdown(f"Value: :blue[**Rs {item['price']:,.2f}**]")
                         st.markdown(f"Booking Token: :green[**Rs {item['advance_token']:,.2f}**]")
@@ -259,34 +235,27 @@ if menu == "🛍️ Customer Marketplace":
                         st.markdown(f"Price: :green[**Rs {item['price']:,.2f}**]")
 
                     commission_required = round((item["advance_token"] if item["is_high_val"]==1 else item["price"]) * 0.01, 2)
-                    
-                    if item["v_wallet"] < commission_required:
-                        st.error("⚠️ Store Currently Offline")
+                    if item["v_wallet"] < commission_required: st.error("⚠️ Store Currently Offline")
                     else:
-                        # ONLY ADD TO CART OPTION GIVEN HERE
                         if st.button("➕ Add to Cart", key=f"cart_{item['p_id']}", use_container_width=True):
                             st.session_state.cart.append(item)
                             st.toast("Item added to your Cart! Head to Checkout.", icon="🛍️")
-    else:
-        st.info("No products found nearby. Try changing your search or location.")
+    else: st.info("No products found nearby. Try changing your search or location.")
 
 # -----------------------------------------------------------
-# TAB 2: CART & CHECKOUT (Order Flow Handled Here)
+# TAB 2: CART & CHECKOUT
 # -----------------------------------------------------------
 elif menu == "🛒 Cart & Checkout":
-    st.markdown("<h2>🛒 Your Secure Cart & Checkout</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-title'>🛒 Your Secure Checkout</div>", unsafe_allow_html=True)
     if st.session_state.cart:
         cart_df = pd.DataFrame(st.session_state.cart)
-        
         with st.container(border=True):
             st.markdown("### 📦 Cart Items")
             st.dataframe(cart_df[["brand", "title", "price", "v_name", "distance"]], use_container_width=True)
-            if st.button("🗑️ Clear Entire Cart", key="clear_cart"): 
-                st.session_state.cart = []; st.rerun()
+            if st.button("🗑️ Clear Entire Cart", key="clear_cart"): st.session_state.cart = []; st.rerun()
 
         unique_vendors = cart_df["v_id"].nunique()
-        if unique_vendors > 1:
-            st.error("⚠️ Your cart contains items from multiple stores. Please place order from one store at a time.")
+        if unique_vendors > 1: st.error("⚠️ Cart contains items from multiple stores. Order from one store at a time.")
         else:
             sample_item = st.session_state.cart[0]
             items_total = cart_df["price"].sum() if sample_item["is_high_val"]==0 else cart_df["advance_token"].sum()
@@ -305,8 +274,7 @@ elif menu == "🛒 Cart & Checkout":
                         fee = get_delivery_fee(sample_item["distance"], items_total, 1, 20.0, 30.0, 10.0)[0]
                         final_fee = 0.0 if final_mode == "Pickup" else fee
                     else:
-                        final_mode = "Site Visit / Token Booking"
-                        final_fee = 0.0
+                        final_mode = "Site Visit / Token Booking"; final_fee = 0.0
 
             with c_col2:
                 with st.container(border=True):
@@ -336,17 +304,72 @@ elif menu == "🛒 Cart & Checkout":
                             st.success(f"🎉 Order #{order_id} Placed Successfully!")
                             st.info(f"Your secret OTP is **{gen_otp}**. Please give this to the rider/store after making the UPI payment.")
                             st.balloons()
-                    else:
-                        st.warning("Please tick the confirmation checkbox to place your order.")
+                    else: st.warning("Please tick the confirmation checkbox to place your order.")
+    else: st.info("🛒 Your cart is completely empty.")
 
-    else: 
-        st.info("🛒 Your cart is completely empty. Please add items from the Customer Marketplace.")
+# -----------------------------------------------------------
+# TAB 3: SCHEDULED SITE VISITS
+# -----------------------------------------------------------
+elif menu == "📅 Scheduled Site Visits":
+    st.markdown("<div class='premium-title'>📅 Site Visits & Consultations</div>", unsafe_allow_html=True)
+    conn_v = sqlite3.connect(DB_NAME)
+    sv_df = pd.read_sql_query('SELECT sv.id, sv.customer_name, sv.customer_phone, sv.visit_date, sv.visit_time, sv.status, p.brand, p.title, v.name as firm_name FROM site_visits sv JOIN products p ON sv.product_id = p.id JOIN vendors v ON sv.vendor_id = v.id ORDER BY sv.created_at DESC', conn_v)
+    conn_v.close()
+    if not sv_df.empty: st.dataframe(sv_df, use_container_width=True)
+    else: st.info("No site visits scheduled yet.")
+
+# -----------------------------------------------------------
+# TAB 4: TRACK MY ORDERS & CHAT
+# -----------------------------------------------------------
+elif menu == "🚚 Track My Orders & Chat":
+    st.markdown("<div class='premium-title'>🚚 Track Orders & Direct Chat</div>", unsafe_allow_html=True)
+    t_phone = st.text_input("Enter your Registered WhatsApp Phone Number:", value="919876500000")
+    conn = sqlite3.connect(DB_NAME)
+    my_orders = pd.read_sql_query('SELECT o.*, v.name as shop_name, v.phone as shop_phone FROM orders o JOIN vendors v ON o.vendor_id = v.id WHERE o.customer_phone = ? ORDER BY o.created_at DESC', conn, params=(t_phone,))
+    
+    if not my_orders.empty:
+        for _, o_row in my_orders.iterrows():
+            with st.container(border=True):
+                c_t1, c_t2 = st.columns([3, 2])
+                with c_t1:
+                    st.markdown(f"### Order #{o_row['id']} - {o_row['items_summary']}")
+                    st.write(f"🏬 **Store:** {o_row['shop_name']} | 📍 Distance: `{o_row['distance_km']} KM`")
+                    st.write(f"**Amount:** :green[**Rs {o_row['grand_total']:,.2f}**] | Payment: `{o_row['payment_status']}`")
+                    st.warning(f"🔒 **Your Delivery OTP:** `{o_row['delivery_otp']}`")
+                    
+                    status = o_row['status']
+                    if status == "Order Placed": st.warning("🟡 Status: **Order Placed (Waiting for Store Dispatch)**")
+                    elif status == "Accepted by Rider": st.info("🚴 Status: **Rider Accepted Order - Pick up in progress**")
+                    elif status == "Dispatched": st.info("🔵 Status: **Out for Delivery** 🚚")
+                    elif status == "Delivered": 
+                        st.success("🟢 Status: **Delivered Successfully** ✅")
+                        with st.expander("⭐ Leave a Review for this Store"):
+                            with st.form(f"rev_form_{o_row['id']}"):
+                                star_val = st.slider("Star Rating (1 to 5)", 1, 5, 5)
+                                rev_txt = st.text_input("Feedback", placeholder="Great product!")
+                                if st.form_submit_button("Submit Rating"):
+                                    conn.execute("INSERT INTO reviews (vendor_id, customer_name, rating, review_text) VALUES (?, ?, ?, ?)", (o_row['vendor_id'], "Rahul Sharma", star_val, rev_txt))
+                                    conn.commit(); st.success("Rating saved!")
+
+                with c_t2:
+                    st.markdown("#### 💬 Live In-App Chat")
+                    msgs = pd.read_sql_query("SELECT * FROM messages WHERE order_id = ? ORDER BY sent_at ASC", conn, params=(o_row['id'],))
+                    if not msgs.empty:
+                        for _, m_row in msgs.iterrows(): st.write(f"**{m_row['sender_name']}:** {m_row['message_text']}")
+                    
+                    with st.form(f"chat_form_{o_row['id']}"):
+                        msg_input = st.text_input("Type message / instructions...", key=f"msg_in_{o_row['id']}")
+                        if st.form_submit_button("Send") and msg_input:
+                            conn.execute("INSERT INTO messages (order_id, sender_name, message_text) VALUES (?, ?, ?)", (o_row['id'], "Customer", msg_input))
+                            conn.commit(); st.rerun()
+    else: st.info("No orders found for this phone number.")
+    conn.close()
 
 # -----------------------------------------------------------
 # TAB 5: VENDOR TERMINAL
 # -----------------------------------------------------------
 elif menu == "🏪 Vendor Terminal":
-    st.markdown("<h2>🔔 Store Orders & Fulfillment Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-title'>🔔 Store Fulfillment Dashboard</div>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     
@@ -371,32 +394,28 @@ elif menu == "🏪 Vendor Terminal":
                         if ord_row["status"] == "Order Placed":
                             if ord_row['delivery_mode'] == "Pickup":
                                 if st.button("✅ Confirm Picked Up & Paid", key=f"pu_{ord_row['id']}"):
-                                    conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ord_row['id'],))
-                                    conn.commit(); st.rerun()
+                                    conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ord_row['id'],)); conn.commit(); st.rerun()
                             elif ord_row['delivery_mode'] == "Delivery":
                                 if st.button("Self-Dispatch (Own Boy)", key=f"sd_{ord_row['id']}"):
-                                    conn.execute("UPDATE orders SET status = 'Dispatched' WHERE id = ?", (ord_row['id'],))
-                                    conn.commit(); st.rerun()
+                                    conn.execute("UPDATE orders SET status = 'Dispatched' WHERE id = ?", (ord_row['id'],)); conn.commit(); st.rerun()
                                 if ord_row['grand_total'] <= 5000:
                                     if st.button("🛵 Request Platform Rider", type="primary", key=f"rr_{ord_row['id']}"):
-                                        conn.execute("UPDATE orders SET status = 'Rider Requested' WHERE id = ?", (ord_row['id'],))
-                                        conn.commit(); st.rerun()
-                                else:
-                                    st.error("⚠️ Order > Rs 5000. Use Self-Dispatch.")
+                                        conn.execute("UPDATE orders SET status = 'Rider Requested' WHERE id = ?", (ord_row['id'],)); conn.commit(); st.rerun()
+                                else: st.error("⚠️ Order > Rs 5000. Use Self-Dispatch.")
                         elif ord_row["status"] == "Dispatched" and ord_row['rider_id'] == 0:
                             if st.button("✅ Mark Delivered & Paid", key=f"md_{ord_row['id']}"):
-                                conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ord_row['id'],))
-                                conn.commit(); st.rerun()
+                                conn.execute("UPDATE orders SET status = 'Delivered', payment_status = 'Paid via UPI' WHERE id = ?", (ord_row['id'],)); conn.commit(); st.rerun()
 
                         msgs = pd.read_sql_query("SELECT message_text FROM messages WHERE order_id = ? AND sender_name = 'System'", conn, params=(ord_row['id'],))
                         for _, m in msgs.iterrows(): st.info(m['message_text'])
+        else: st.info("No orders received yet for this store.")
     conn.close()
 
 # -----------------------------------------------------------
 # TAB 6: RIDER TERMINAL
 # -----------------------------------------------------------
 elif menu == "🛵 Rider Terminal (UPI)":
-    st.markdown("<h2>🛵 Delivery Partner Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-title'>🛵 Delivery Partner Dashboard</div>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_NAME)
     riders_df = pd.read_sql_query("SELECT * FROM riders WHERE status = 'Active'", conn)
     
@@ -435,7 +454,188 @@ elif menu == "🛵 Rider Terminal (UPI)":
     conn.close()
 
 # -----------------------------------------------------------
-# OTHER TABS (Scheduled Visits, Track, Standee, Wallet, Products, etc.)
+# TAB 7: VENDOR QR STANDEE
 # -----------------------------------------------------------
-elif menu in ["📅 Scheduled Site Visits", "🚚 Track My Orders & Chat", "🪧 Vendor QR Standee", "💳 Vendor Wallet & Refund", "📦 Add Product / Property", "🏬 Register New Store", "📊 Platform Earnings Ledger"]:
-    st.info("Additional admin & vendor features remain fully functional and securely integrated.")
+elif menu == "🪧 Vendor QR Standee":
+    st.markdown("<div class='premium-title'>🪧 Download Official QR Standee</div>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_NAME)
+    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
+    conn.close()
+    if not vendors_df.empty:
+        selected_vid = st.selectbox("Select Shop", vendors_df["id"].tolist(), format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0])
+        curr_v = vendors_df[vendors_df["id"] == selected_vid].iloc[0]
+        st.info(f"Generating Standee for **{curr_v['name']}**")
+        standee_pdf_bytes = generate_standee_pdf(curr_v)
+        st.download_button("🖨️ Download PDF Counter Standee", data=bytes(standee_pdf_bytes), file_name=f"Standee_{curr_v['name'].replace(' ', '_')}.pdf", mime="application/pdf")
+
+# -----------------------------------------------------------
+# TAB 8: VENDOR WALLET & REFUND
+# -----------------------------------------------------------
+elif menu == "💳 Vendor Wallet & Refund":
+    st.markdown("<div class='premium-title'>💳 Store Wallet & Refund Manager</div>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_NAME)
+    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
+    conn.close()
+    if not vendors_df.empty:
+        v_select = st.selectbox("Select Store Account", vendors_df["id"].tolist(), format_func=lambda x: f"{vendors_df[vendors_df['id'] == x]['name'].values[0]}")
+        curr_vendor = vendors_df[vendors_df["id"] == v_select].iloc[0]
+
+        w1, w2 = st.columns([1, 1])
+        with w1:
+            with st.container(border=True):
+                st.markdown("### 💰 Your In-App Wallet Balance")
+                st.metric("Safe Unused Balance", f"Rs {curr_vendor['wallet_balance']:,.2f}")
+                if curr_vendor['wallet_balance'] < 10.0: st.error("🚨 Low Balance! Store Offline.")
+                else: st.success("🟢 Store is ACTIVE.")
+
+                st.markdown("---")
+                st.markdown("#### 🔄 Withdraw Remaining Balance")
+                withdraw_request = curr_vendor['wallet_balance']
+                processing_fee = max(round(withdraw_request * 0.02, 2), 3.0)
+                
+                if withdraw_request > processing_fee:
+                    refund_amt = withdraw_request - processing_fee
+                    st.write(f"Withdrawal Processing Fee (2%): :red[**- Rs {processing_fee:,.2f}**]")
+                    if st.button("💸 Request Balance Withdrawal"):
+                        conn_wd = sqlite3.connect(DB_NAME)
+                        conn_wd.execute("UPDATE vendors SET wallet_balance = 0.0 WHERE id = ?", (v_select,))
+                        conn_wd.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref, status) VALUES (?, 'WITHDRAWAL_REQUEST', ?, ?, 'Pending Admin Approval')", 
+                                        (v_select, refund_amt, f"Refund to UPI: {curr_vendor['upi_id']} (Rs {processing_fee} Fee Deducted)"))
+                        conn_wd.commit(); conn_wd.close(); st.success(f"🎉 रिक्वेस्ट भेज दी गई है!"); st.rerun()
+                elif withdraw_request > 0: st.error(f"⚠️ Balance too low to cover Rs {processing_fee:,.2f} fee.")
+
+        with w2:
+            with st.container(border=True):
+                st.markdown("### ⚡ Top-Up In-App Wallet")
+                topup_amt = st.radio("Select Top-Up Amount", [100.0, 150.0, 200.0, 500.0], index=1, horizontal=True)
+                p_qr = generate_upi_qr(PLATFORM_UPI_ID, "Bharat Platform Admin", topup_amt, f"Wallet_Store_{curr_vendor['id']}")
+                st.image(p_qr, width=170)
+                
+                txn_ref_in = st.text_input("Enter 12-Digit UPI Ref / UTR No.")
+                if st.button("✅ Add Balance to My Wallet") and txn_ref_in:
+                    conn_tu = sqlite3.connect(DB_NAME)
+                    conn_tu.execute("UPDATE vendors SET wallet_balance = wallet_balance + ? WHERE id = ?", (topup_amt, v_select))
+                    conn_tu.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref, status) VALUES (?, 'TOP-UP', ?, ?, 'Completed')", (v_select, topup_amt, txn_ref_in))
+                    conn_tu.commit(); conn_tu.close(); st.success(f"🎉 Rs {topup_amt:,.2f} added!"); st.rerun()
+
+        st.markdown("---")
+        st.write("### 📜 Wallet History")
+        conn_l = sqlite3.connect(DB_NAME)
+        logs_df = pd.read_sql_query("SELECT * FROM wallet_logs WHERE vendor_id = ? ORDER BY created_at DESC", conn_l, params=(v_select,))
+        conn_l.close()
+        if not logs_df.empty: st.dataframe(logs_df, use_container_width=True)
+
+# -----------------------------------------------------------
+# TAB 9: ADD PRODUCT / PROPERTY LISTING
+# -----------------------------------------------------------
+elif menu == "📦 Add Product / Property":
+    st.markdown("<div class='premium-title'>📦 Product & Listing Management</div>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_NAME)
+    vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
+    conn.close()
+
+    t1, t2 = st.tabs(["➕ List New Item", "⚙️ Store Settings"])
+    with t1:
+        with st.form("prod_form"):
+            s_id = st.selectbox("Select Store", vendors_df["id"].tolist(), format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0])
+            c_p1, c_p2 = st.columns(2)
+            with c_p1:
+                b_name = st.text_input("Brand / Project Name")
+                p_name = st.text_input("Product Title / Plot No.")
+                p_cat = st.selectbox("Category", ["Real Estate", "Grocery", "Electronics", "Automobile", "Fashion"])
+                is_high = st.checkbox("High-Value Property/Vehicle?", value=False)
+            with c_p2:
+                p_val = st.number_input("Full Selling Price (Rs)", min_value=50.0, value=500.0, step=50.0)
+                adv_val = st.number_input("Advance Token (if High-Value)", min_value=0.0, value=11000.0 if is_high else 0.0)
+                img_link = st.text_input("Cover Image URL", placeholder="https://via.placeholder.com/200")
+                p_desc = st.text_area("Full Description")
+
+            if st.form_submit_button("🚀 Publish Listing") and b_name and p_name:
+                conn_i = sqlite3.connect(DB_NAME)
+                conn_i.execute('''INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, image_url, description)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (s_id, b_name, p_name, p_cat, p_val, 1 if is_high else 0, adv_val, img_link, p_desc))
+                conn_i.commit(); conn_i.close(); st.success("✅ Listed successfully!"); st.rerun()
+    with t2:
+        for _, v in vendors_df.iterrows():
+            with st.expander(f"📍 {v['name']} ({v['city']})"):
+                toggle_free = st.toggle("Offer FREE Delivery above Rs 500", value=bool(v["free_delivery_above_500"]), key=f"f_{v['id']}")
+                toggle_spon = st.toggle("Enable Sponsored Top Badge", value=bool(v["is_sponsored"]), key=f"sp_{v['id']}")
+                if st.button("Save Settings", key=f"s_{v['id']}"):
+                    conn_s = sqlite3.connect(DB_NAME)
+                    conn_s.execute("UPDATE vendors SET free_delivery_above_500 = ?, is_sponsored = ? WHERE id = ?", (1 if toggle_free else 0, 1 if toggle_spon else 0, v["id"]))
+                    conn_s.commit(); conn_s.close(); st.success("Updated!"); st.rerun()
+
+# -----------------------------------------------------------
+# TAB 10: REGISTER NEW STORE / RIDER
+# -----------------------------------------------------------
+elif menu == "🏬 Register New Store":
+    st.markdown("<div class='premium-title'>🏬 Enterprise & Rider Onboarding</div>", unsafe_allow_html=True)
+    ob_tab1, ob_tab2 = st.tabs(["🏪 Register Shop", "🛵 Register Rider"])
+    
+    with ob_tab1:
+        with st.form("shop_form"):
+            s_c1, s_c2 = st.columns(2)
+            with s_c1:
+                name = st.text_input("Store Name")
+                phone = st.text_input("WhatsApp Phone")
+                upi = st.text_input("Store UPI ID for Payments")
+                city = st.text_input("City")
+            with s_c2:
+                lat = st.number_input("GPS Latitude", value=21.1450, format="%.4f")
+                lon = st.number_input("GPS Longitude", value=79.0800, format="%.4f")
+                b1 = st.number_input("1 KM Fee (Rs)", value=20.0)
+                b2 = st.number_input("2 KM Fee (Rs)", value=30.0)
+                pe = st.number_input("Extra KM Fee (Rs)", value=10.0)
+
+            if st.form_submit_button("✅ Register Store") and name and upi:
+                conn_r = sqlite3.connect(DB_NAME)
+                conn_r.execute('''INSERT INTO vendors (name, phone, upi_id, city, lat, lon, wallet_balance, free_delivery_above_500, base_1km, base_2km, per_km_extra)
+                                  VALUES (?, ?, ?, ?, ?, ?, 0.0, 1, ?, ?, ?)''', (name, phone, upi, city, lat, lon, b1, b2, pe))
+                conn_r.commit(); conn_r.close(); st.success(f"🎉 Store '{name}' registered!")
+
+    with ob_tab2:
+        with st.form("rider_reg_form"):
+            r_name = st.text_input("Rider Name"); r_phone = st.text_input("WhatsApp Phone")
+            r_city = st.text_input("City"); r_veh = st.text_input("Vehicle Number")
+            if st.form_submit_button("🛵 Register Rider") and r_name and r_phone:
+                try:
+                    conn_rd = sqlite3.connect(DB_NAME)
+                    conn_rd.execute("INSERT INTO riders (name, phone, city, vehicle_number, wallet_balance, status) VALUES (?, ?, ?, ?, 0.0, 'Pending')", (r_name, r_phone, r_city, r_veh))
+                    conn_rd.commit(); conn_rd.close(); st.success(f"🎉 {r_name} registered! Deposit Rs 5,000 via Admin.")
+                except Exception: st.error("Phone number already registered.")
+
+# -----------------------------------------------------------
+# TAB 11: PLATFORM EARNINGS LEDGER & ADMIN APPROVALS
+# -----------------------------------------------------------
+else:
+    st.markdown("<div class='premium-title'>📊 Platform Earnings Ledger</div>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_NAME)
+    orders_df = pd.read_sql_query("SELECT * FROM orders ORDER BY created_at DESC", conn)
+    pending_withdrawals = pd.read_sql_query("SELECT * FROM wallet_logs WHERE status = 'Pending Admin Approval'", conn)
+    conn.close()
+
+    total_comm = orders_df["platform_commission_1pct"].sum() if not orders_df.empty else 0.0
+
+    m1, m2 = st.columns(2)
+    m1.metric("Total 1% Pure Commission Earned", f"Rs {total_comm:,.2f}", delta="Auto-Debited on Sales")
+    m2.metric("Pending Withdrawal Requests", len(pending_withdrawals))
+    st.markdown("---")
+    
+    an1, an2 = st.columns(2)
+    with an1:
+        st.write("### 📜 Commission Deductions:")
+        if not orders_df.empty: st.dataframe(orders_df[["id", "customer_name", "grand_total", "platform_commission_1pct", "created_at"]], use_container_width=True)
+        else: st.info("No orders placed yet.")
+
+    with an2:
+        st.write("### ⚡ Pending Vendor Withdrawals")
+        if not pending_withdrawals.empty:
+            for _, w_row in pending_withdrawals.iterrows():
+                with st.container(border=True):
+                    st.write(f"**Vendor ID #{w_row['vendor_id']}** requested **Rs {w_row['amount']:,.2f}**")
+                    st.info(f"Details: `{w_row['txn_ref']}`")
+                    if st.button("✅ Mark Paid (Approve)", key=f"approve_{w_row['id']}"):
+                        conn_ap = sqlite3.connect(DB_NAME)
+                        conn_ap.execute("UPDATE wallet_logs SET status = 'Refund Completed' WHERE id = ?", (w_row['id'],))
+                        conn_ap.commit(); conn_ap.close(); st.success("Marked as Paid!"); st.rerun()
+        else: st.success("No pending requests!")
