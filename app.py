@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 DB_NAME = "hyperlocal_market.db"
-PLATFORM_UPI_ID = "adminplatform@upi"
+PLATFORM_UPI_ID = "adminplatform@upi" # आपका करंट अकाउंट UPI (जहाँ वॉलेट रिचार्ज का पैसा आएगा)
 
 # -----------------------------------------------------------
 # 1. DATABASE SETUP & COMPLETE SCHEMA MIGRATION
@@ -53,16 +53,14 @@ def init_db():
     ''')
 
     vendor_cols = [col[1] for col in c.execute("PRAGMA table_info(vendors)").fetchall()]
+    if "wallet_balance" not in vendor_cols:
+        c.execute("ALTER TABLE vendors ADD COLUMN wallet_balance REAL DEFAULT 150.0")
     if "rera_id" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN rera_id TEXT DEFAULT 'N/A'")
     if "is_kyc_verified" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN is_kyc_verified INTEGER DEFAULT 1")
     if "is_sponsored" not in vendor_cols:
         c.execute("ALTER TABLE vendors ADD COLUMN is_sponsored INTEGER DEFAULT 0")
-    if "gstin" not in vendor_cols:
-        c.execute("ALTER TABLE vendors ADD COLUMN gstin TEXT DEFAULT 'NON-GST'")
-    if "wallet_balance" not in vendor_cols:
-        c.execute("ALTER TABLE vendors ADD COLUMN wallet_balance REAL DEFAULT 150.0")
 
     # 2. Products Table
     c.execute('''
@@ -114,11 +112,16 @@ def init_db():
             txn_type TEXT,
             amount REAL,
             txn_ref TEXT,
+            status TEXT DEFAULT 'Completed',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # Default Demo Store (ममता स्टोर)
+    log_cols = [col[1] for col in c.execute("PRAGMA table_info(wallet_logs)").fetchall()]
+    if "status" not in log_cols:
+        c.execute("ALTER TABLE wallet_logs ADD COLUMN status TEXT DEFAULT 'Completed'")
+
+    # Default Demo Store
     c.execute("SELECT COUNT(*) FROM vendors")
     if c.fetchone()[0] == 0:
         c.execute('''
@@ -129,8 +132,7 @@ def init_db():
         c.execute('''
             INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, video_url, image_url, description)
             VALUES 
-            (1, 'Cotton King', 'Pure Cotton Shirt', 'Fashion', 1000.0, 0, 0.0, '', 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=60', 'Pure breathable formal shirt'),
-            (1, 'Tata Tea', 'Tata Tea Premium 250g', 'Grocery', 50.0, 0, 0.0, '', 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=500&auto=format&fit=crop&q=60', 'Fresh daily morning tea')
+            (1, 'Cotton King', 'Pure Cotton Shirt', 'Fashion', 1000.0, 0, 0.0, '', 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=60', 'Pure breathable formal shirt')
         ''')
 
     conn.commit()
@@ -139,15 +141,13 @@ def init_db():
 init_db()
 
 # -----------------------------------------------------------
-# 2. LOGIC FUNCTIONS
+# 2. HELPER FUNCTIONS
 # -----------------------------------------------------------
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
     d_lat = math.radians(lat2 - lat1)
     d_lon = math.radians(lon2 - lon1)
-    a = (math.sin(d_lat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(d_lon / 2) ** 2)
+    a = (math.sin(d_lat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2) ** 2)
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return round(R * c, 2)
 
@@ -161,14 +161,53 @@ def generate_upi_qr(upi_id, payee_name, amount, note):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
+def generate_pdf_invoice(bill_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "BHARAT HYPERLOCAL MARKETPLACE", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Official Digital Bill / Receipt | GSTIN: {bill_data.get('gstin', 'NON-GST')}", ln=True, align="C")
+    pdf.line(10, 28, 200, 28)
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(100, 7, f"Order ID: #{bill_data['order_id']}")
+    pdf.cell(90, 7, f"Customer: {bill_data['cust']}", ln=True)
+    pdf.cell(100, 7, f"Direct Merchant Store: {bill_data['shop']}")
+    pdf.cell(90, 7, f"Distance: {bill_data['distance']} KM", ln=True)
+    pdf.ln(4)
+    pdf.line(10, 50, 200, 50)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(120, 7, "Description")
+    pdf.cell(70, 7, "Amount (INR)", ln=True, align="R")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(120, 7, f"{bill_data['item']}")
+    pdf.cell(70, 7, f"Rs {bill_data['price']:,.2f}", ln=True, align="R")
+    pdf.cell(120, 7, "Delivery Charges")
+    pdf.cell(70, 7, f"Rs {bill_data['fee']:,.2f}", ln=True, align="R")
+    pdf.line(10, 85, 200, 85)
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(120, 9, "Total Paid to Store directly:")
+    pdf.cell(70, 9, f"Rs {bill_data['total']:,.2f}", ln=True, align="R")
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, f"1% Platform Fee (Rs {bill_data['cut']:,.2f}) auto-deducted from merchant prepaid wallet.", ln=True, align="C")
+    return pdf.output()
+
+if "cart" not in st.session_state:
+    st.session_state.cart = []
+
 # -----------------------------------------------------------
-# 3. NAVIGATION
+# 3. SIDEBAR NAVIGATION
 # -----------------------------------------------------------
 st.sidebar.title("🇮🇳 Bharat Platform")
 menu = st.sidebar.radio("Navigation Menu", [
     "🛍️ Customer Marketplace",
+    "🛒 Multi-Item Cart Checkout",
     "🏪 Vendor Terminal & Orders",
-    "💳 Vendor Wallet & Refund/Withdrawal",
+    "💳 Vendor Wallet & Refund",
     "📦 Add Product / Listing",
     "🏬 Register New Store (Free)",
     "📊 Platform Earnings Ledger"
@@ -181,29 +220,24 @@ if menu == "🛍️ Customer Marketplace":
     st.subheader("📍 Nearby Stores (Direct Store UPI Payment)")
     
     live_loc = get_geolocation()
-    detected_lat = 21.1458
-    detected_lon = 79.0882
+    detected_lat, detected_lon = 21.1458, 79.0882
     if live_loc and 'coords' in live_loc:
         detected_lat = live_loc['coords']['latitude']
         detected_lon = live_loc['coords']['longitude']
 
     c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-    with c1:
-        cust_name = st.text_input("Customer Name", value="Rahul Sharma")
-    with c2:
-        cust_phone = st.text_input("Customer Phone", value="919876500000")
-    with c3:
-        cust_lat = st.number_input("Latitude", value=float(detected_lat), format="%.4f")
-    with c4:
-        cust_lon = st.number_input("Longitude", value=float(detected_lon), format="%.4f")
+    with c1: cust_name = st.text_input("Customer Name", value="Rahul Sharma")
+    with c2: cust_phone = st.text_input("Customer Phone", value="919876500000")
+    with c3: cust_lat = st.number_input("Latitude", value=float(detected_lat), format="%.4f")
+    with c4: cust_lon = st.number_input("Longitude", value=float(detected_lon), format="%.4f")
 
     st.markdown("---")
     
     conn = sqlite3.connect(DB_NAME)
     query = '''
-        SELECT p.id, p.brand, p.title, p.category, p.price, p.image_url, p.description,
+        SELECT p.id, p.brand, p.title, p.price, p.image_url, p.description,
                v.id as vendor_id, v.name as vendor_name, v.phone as vendor_phone, v.upi_id,
-               v.wallet_balance as vendor_wallet, v.lat, v.lon
+               v.wallet_balance as vendor_wallet, v.lat, v.lon, v.gstin
         FROM products p
         JOIN vendors v ON p.vendor_id = v.id
     '''
@@ -214,19 +248,11 @@ if menu == "🛍️ Customer Marketplace":
     for _, row in df.iterrows():
         dist = calculate_distance(cust_lat, cust_lon, row["lat"], row["lon"])
         results.append({
-            "p_id": row["id"],
-            "brand": row["brand"],
-            "title": row["title"],
-            "category": row["category"],
-            "price": row["price"],
-            "image_url": row["image_url"] if row["image_url"] else "https://via.placeholder.com/300x200?text=Product+Image",
-            "desc": row["description"],
-            "v_id": row["vendor_id"],
-            "v_name": row["vendor_name"],
-            "v_phone": str(row["vendor_phone"]),
-            "v_upi": row["upi_id"],
-            "v_wallet": row["vendor_wallet"],
-            "distance": dist
+            "p_id": row["id"], "brand": row["brand"], "title": row["title"], "price": row["price"],
+            "image_url": row["image_url"] if row["image_url"] else "https://via.placeholder.com/300x200?text=Product",
+            "v_id": row["vendor_id"], "v_name": row["vendor_name"], "v_phone": str(row["vendor_phone"]),
+            "v_upi": row["upi_id"], "v_wallet": row["vendor_wallet"], "v_gstin": row["gstin"],
+            "distance": dist, "delivery_fee": 0.0
         })
 
     if results:
@@ -244,40 +270,41 @@ if menu == "🛍️ Customer Marketplace":
 
                     commission_required = round(item["price"] * 0.01, 2)
                     
-                    # Store active only if wallet balance > 0
                     if item["v_wallet"] < commission_required:
                         st.error(f"⚠️ {item['v_name']} is currently Offline (Recharge required by shopkeeper).")
                     else:
-                        if st.button(f"⚡ Buy & Pay Store Directly (Rs {item['price']:,.2f})", key=f"btn_{item['p_id']}"):
-                            item_total = item["price"]
-                            cut_1pct = commission_required
-                            gen_otp = str(random.randint(1000, 9999))
+                        b_col1, b_col2 = st.columns(2)
+                        with b_col1:
+                            if st.button(f"➕ Add to Cart", key=f"cart_{item['p_id']}"):
+                                st.session_state.cart.append(item)
+                                st.toast(f"Added '{item['brand']} - {item['title']}' to cart!", icon="🛒")
+                        with b_col2:
+                            if st.button(f"⚡ Buy Now (Rs {item['price']:,.2f})", key=f"btn_{item['p_id']}"):
+                                item_total = item["price"]
+                                cut_1pct = commission_required
+                                gen_otp = str(random.randint(1000, 9999))
 
-                            conn_o = sqlite3.connect(DB_NAME)
-                            cur = conn_o.cursor()
-                            cur.execute('''
-                                INSERT INTO orders (customer_name, customer_phone, vendor_id, delivery_otp, items_summary, item_price, amount_paid_now, delivery_fee, grand_total, platform_commission_1pct, vendor_net_payout, distance_km, status)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, 0.0, ?, ?, ?, ?, 'Order Placed')
-                            ''', (cust_name, cust_phone, item["v_id"], gen_otp, f"{item['brand']} - {item['title']}", item_total, item_total, item_total, cut_1pct, item_total, item["distance"]))
-                            
-                            # ⚡ सिर्फ बिक्री होने पर ही 1% कमीशन वेंडर के वॉलेट से कटेगा
-                            cur.execute('UPDATE vendors SET wallet_balance = wallet_balance - ? WHERE id = ?', (cut_1pct, item["v_id"]))
-                            conn_o.commit()
-                            order_id = cur.lastrowid
-                            conn_o.close()
+                                conn_o = sqlite3.connect(DB_NAME)
+                                cur = conn_o.cursor()
+                                cur.execute('''
+                                    INSERT INTO orders (customer_name, customer_phone, vendor_id, delivery_otp, items_summary, item_price, grand_total, platform_commission_1pct, distance_km, status)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed')
+                                ''', (cust_name, cust_phone, item["v_id"], gen_otp, f"{item['brand']} - {item['title']}", item_total, item_total, cut_1pct, item["distance"]))
+                                
+                                # ⚡ सिर्फ बिक्री होने पर ही 1% कमीशन वेंडर के वॉलेट से कटेगा
+                                cur.execute('UPDATE vendors SET wallet_balance = wallet_balance - ? WHERE id = ?', (cut_1pct, item["v_id"]))
+                                conn_o.commit()
+                                order_id = cur.lastrowid
+                                conn_o.close()
 
-                            st.session_state.current_bill = {
-                                "order_id": order_id,
-                                "cust": cust_name,
-                                "item": f"{item['brand']} - {item['title']}",
-                                "shop": item["v_name"],
-                                "shop_phone": item["v_phone"],
-                                "shop_upi": item["v_upi"],
-                                "total": item_total,
-                                "cut": cut_1pct
-                            }
+                                st.session_state.current_bill = {
+                                    "order_id": order_id, "cust": cust_name, "cust_phone": cust_phone,
+                                    "otp": gen_otp, "item": f"{item['brand']} - {item['title']}",
+                                    "shop": item["v_name"], "shop_phone": item["v_phone"], "shop_upi": item["v_upi"],
+                                    "gstin": item["v_gstin"], "price": item_total, "fee": 0.0,
+                                    "total": item_total, "cut": cut_1pct, "distance": item["distance"]
+                                }
 
-    # Invoice & Direct Merchant QR
     if "current_bill" in st.session_state:
         b = st.session_state.current_bill
         st.markdown("---")
@@ -288,14 +315,68 @@ if menu == "🛍️ Customer Marketplace":
             st.markdown(f"### 📱 Scan to Pay Direct to {b['shop']}")
             qr_bytes = generate_upi_qr(b["shop_upi"], b["shop"], b["total"], f"Order_{b['order_id']}")
             st.image(qr_bytes, width=220)
-            st.write(f"**Direct Payee UPI:** `{b['shop_upi']}` | **Total Amount:** :green[**Rs {b['total']:,.2f}**]")
+            st.write(f"**Direct Payee UPI:** `{b['shop_upi']}` | **Total:** :green[**Rs {b['total']:,.2f}**]")
             
         with q2:
-            st.markdown("### 🧾 Invoice & Commission Settlement")
-            st.write(f"**Customer:** {b['cust']}")
+            st.markdown("### 🧾 Invoice & Settlement")
             st.write(f"**Item:** {b['item']}")
             st.markdown(f"### **Total Paid to Shop:** :green[Rs {b['total']:,.2f}]")
-            st.info(f"✅ 1% Platform Fee (Rs {b['cut']:,.2f}) auto-debited from {b['shop']}'s Wallet on this transaction.")
+            st.info(f"✅ 1% Platform Fee (Rs {b['cut']:,.2f}) auto-debited from {b['shop']}'s Wallet.")
+            pdf_bytes = generate_pdf_invoice(b)
+            st.download_button("📄 Download PDF Receipt", data=bytes(pdf_bytes), file_name=f"Invoice_{b['order_id']}.pdf", mime="application/pdf")
+
+# -----------------------------------------------------------
+# TAB: MULTI-ITEM CART & CHECKOUT
+# -----------------------------------------------------------
+elif menu == "🛒 Multi-Item Cart Checkout":
+    st.subheader("🛒 Your Shopping Cart")
+    
+    if st.session_state.cart:
+        cart_df = pd.DataFrame(st.session_state.cart)
+        st.dataframe(cart_df[["brand", "title", "price", "v_name", "distance"]], use_container_width=True)
+
+        unique_vendors = cart_df["v_id"].nunique()
+        if unique_vendors > 1:
+            st.warning("⚠️ Cart contains items from different shops. Please place separate orders.")
+        else:
+            items_total = cart_df["price"].sum()
+            sample_item = st.session_state.cart[0]
+            dist = sample_item["distance"]
+            fee = 0.0
+            final_total = items_total + fee
+            
+            st.write(f"Items Subtotal: **Rs {items_total:,.2f}** | Delivery: **Rs {fee:,.2f}**")
+            st.markdown(f"### Grand Total: :green[**Rs {final_total:,.2f}**]")
+
+            cut_1pct = round(items_total * 0.01, 2)
+            if sample_item["v_wallet"] < cut_1pct:
+                st.error("⚠️ Store has insufficient wallet balance to process orders. Please contact shop.")
+            else:
+                if st.button("🚀 Checkout & Pay Directly to Store"):
+                    items_summary = ", ".join([f"{x['brand']} {x['title']}" for x in st.session_state.cart])
+                    gen_otp = str(random.randint(1000, 9999))
+
+                    conn_co = sqlite3.connect(DB_NAME)
+                    cur = conn_co.cursor()
+                    cur.execute('''
+                        INSERT INTO orders (customer_name, customer_phone, vendor_id, delivery_otp, items_summary, item_price, grand_total, platform_commission_1pct, distance_km, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed')
+                    ''', ("Customer", "919876500000", sample_item["v_id"], gen_otp, items_summary, items_total, final_total, cut_1pct, dist))
+                    
+                    cur.execute('UPDATE vendors SET wallet_balance = wallet_balance - ? WHERE id = ?', (cut_1pct, sample_item["v_id"]))
+                    conn_co.commit()
+                    order_id = cur.lastrowid
+                    conn_co.close()
+
+                    st.session_state.cart = []
+                    st.success(f"🎉 Order #{order_id} placed! 1% Commission auto-debited from store wallet.")
+                    st.rerun()
+
+        if st.button("🗑️ Clear Entire Cart"):
+            st.session_state.cart = []
+            st.rerun()
+    else:
+        st.info("Your cart is currently empty.")
 
 # -----------------------------------------------------------
 # TAB 2: VENDOR TERMINAL & ORDERS
@@ -315,10 +396,7 @@ elif menu == "🏪 Vendor Terminal & Orders":
         )
 
         conn = sqlite3.connect(DB_NAME)
-        v_orders = pd.read_sql_query(
-            "SELECT * FROM orders WHERE vendor_id = ? ORDER BY created_at DESC", 
-            conn, params=(selected_vid,)
-        )
+        v_orders = pd.read_sql_query("SELECT * FROM orders WHERE vendor_id = ? ORDER BY created_at DESC LIMIT 10", conn, params=(selected_vid,))
         conn.close()
 
         if not v_orders.empty:
@@ -329,17 +407,16 @@ elif menu == "🏪 Vendor Terminal & Orders":
                         st.markdown(f"**Order #{ord_row['id']}** | Customer: `{ord_row['customer_name']}`")
                         st.write(f"Direct Store Received: :green[**Rs {ord_row['grand_total']:,.2f}**]")
                     with col_o2:
-                        st.write(f"1% Platform Fee Deducted: :red[**-Rs {ord_row['platform_commission_1pct']:,.2f}**]")
-                        st.caption("Deducted from your In-App Wallet balance on successful sale.")
+                        st.write(f"1% Platform Commission: :red[**-Rs {ord_row['platform_commission_1pct']:,.2f}**]")
+                        st.caption("Auto-debited from your prepaid wallet balance.")
         else:
-            st.info("No orders received yet.")
+            st.info("No orders received yet for this store.")
 
 # -----------------------------------------------------------
 # TAB 3: VENDOR WALLET & REFUND / WITHDRAWAL
 # -----------------------------------------------------------
-elif menu == "💳 Vendor Wallet & Refund/Withdrawal":
+elif menu == "💳 Vendor Wallet & Refund":
     st.subheader("💳 Store Personal Wallet & Refund Manager")
-    st.caption("यह आपका निजी वॉलेट है। जब तक माल नहीं बिकता, आपका पैसा 100% सुरक्षित रहता है। आप कभी भी बचा हुआ बैलेंस वापस ले सकते हैं।")
 
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
@@ -362,57 +439,66 @@ elif menu == "💳 Vendor Wallet & Refund/Withdrawal":
                 if curr_vendor['wallet_balance'] < 10.0:
                     st.error("🚨 Low Balance! Store is Offline.")
                 else:
-                    st.success("🟢 Store is ACTIVE (Ready to receive customer orders).")
+                    st.success("🟢 Store is ACTIVE.")
 
-                st.write(f"Store: **{curr_vendor['name']}**")
-                st.write(f"Direct Payment UPI: `{curr_vendor['upi_id']}`")
-
-                # ⚡ 1-Click Withdraw/Refund Remaining Unused Balance
+                # ⚡ Percentage Based Withdrawal Request Logic (2% or Min Rs 3)
                 st.markdown("---")
-                st.markdown("#### 🔄 Withdraw / Refund Remaining Balance")
-                st.caption("अगर आपको प्लेटफॉर्म छोड़ना है, तो बचा हुआ पूरा पैसा आपके UPI पर वापस मिल जाएगा:")
+                st.markdown("#### 🔄 Withdraw Remaining Balance")
+                st.caption("⚠️ **नोट:** विथड्रॉल पर 2% (न्यूनतम ₹3) बैंक और प्लेटफ़ॉर्म प्रोसेसिंग चार्ज काटा जाएगा।")
                 
-                if curr_vendor['wallet_balance'] > 0:
-                    if st.button("💸 Withdraw Full Remaining Balance"):
-                        refund_amt = curr_vendor['wallet_balance']
+                withdraw_request = curr_vendor['wallet_balance']
+                
+                # Percentage Logic: 2% of amount, but minimum Rs 3.0
+                processing_fee = round(withdraw_request * 0.02, 2)
+                if processing_fee < 3.0:
+                    processing_fee = 3.0
+                
+                if withdraw_request > processing_fee:
+                    refund_amt = withdraw_request - processing_fee
+                    
+                    st.write(f"कुल वॉलेट बैलेंस: **Rs {withdraw_request:,.2f}**")
+                    st.write(f"प्रोसेसिंग फीस (2%): :red[**- Rs {processing_fee:,.2f}**]")
+                    st.write(f"आपके खाते में आएंगे: :green[**Rs {refund_amt:,.2f}**]")
+                    
+                    if st.button("💸 Request Balance Withdrawal"):
                         conn_wd = sqlite3.connect(DB_NAME)
+                        # Set Wallet to 0
                         conn_wd.execute("UPDATE vendors SET wallet_balance = 0.0 WHERE id = ?", (v_select,))
-                        conn_wd.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref) VALUES (?, 'WITHDRAWAL/REFUND', ?, ?)", 
-                                        (v_select, refund_amt, f"Refund to {curr_vendor['upi_id']}"))
+                        # Create Pending Request for Admin
+                        conn_wd.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref, status) VALUES (?, 'WITHDRAWAL_REQUEST', ?, ?, 'Pending Admin Approval')", 
+                                        (v_select, refund_amt, f"Refund to UPI: {curr_vendor['upi_id']} (Rs {processing_fee} Fee Deducted)"))
                         conn_wd.commit()
                         conn_wd.close()
-                        st.success(f"🎉 Rs {refund_amt:,.2f} refund initiated to `{curr_vendor['upi_id']}`! Wallet is now Rs 0.00.")
+                        st.success(f"🎉 रिक्वेस्ट भेज दी गई है! एडमिन अप्रूवल के बाद Rs {refund_amt:,.2f} आपके UPI पर भेज दिए जाएंगे।")
                         st.rerun()
+                elif withdraw_request > 0:
+                    st.error(f"⚠️ आपका बैलेंस (Rs {withdraw_request:,.2f}) प्रोसेसिंग फीस (Rs {processing_fee:,.2f}) चुकाने के लिए बहुत कम है।")
                 else:
                     st.info("No balance available to withdraw.")
 
         with w2:
             with st.container(border=True):
                 st.markdown("### ⚡ Top-Up In-App Wallet")
-                st.write("Advance deposit to keep store active:")
-                
                 topup_amt = st.radio("Select Top-Up Amount", [100.0, 150.0, 200.0, 500.0], index=1, horizontal=True)
-                
                 p_qr = generate_upi_qr(PLATFORM_UPI_ID, "Bharat Platform Admin", topup_amt, f"Wallet_Store_{curr_vendor['id']}")
                 st.image(p_qr, width=170)
                 st.caption(f"Platform UPI: `{PLATFORM_UPI_ID}` | Amount: **Rs {topup_amt:.0f}**")
                 
-                txn_ref_in = st.text_input("Enter 12-Digit UPI Ref / UTR No.", placeholder="e.g. 423456789012")
-                
+                txn_ref_in = st.text_input("Enter 12-Digit UPI Ref / UTR No.")
                 if st.button("✅ Add Balance to My Wallet"):
                     if txn_ref_in:
                         conn_tu = sqlite3.connect(DB_NAME)
                         conn_tu.execute("UPDATE vendors SET wallet_balance = wallet_balance + ? WHERE id = ?", (topup_amt, v_select))
-                        conn_tu.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref) VALUES (?, 'TOP-UP', ?, ?)", (v_select, topup_amt, txn_ref_in))
+                        conn_tu.execute("INSERT INTO wallet_logs (vendor_id, txn_type, amount, txn_ref, status) VALUES (?, 'TOP-UP', ?, ?, 'Completed')", (v_select, topup_amt, txn_ref_in))
                         conn_tu.commit()
                         conn_tu.close()
-                        st.success(f"🎉 Rs {topup_amt:,.2f} added to {curr_vendor['name']}'s wallet!")
+                        st.success(f"🎉 Rs {topup_amt:,.2f} added to wallet!")
                         st.rerun()
                     else:
                         st.error("Please enter UTR Number after payment.")
 
         st.markdown("---")
-        st.write("### 📜 Wallet History (Top-Ups & Refunds):")
+        st.write("### 📜 Wallet History (Top-Ups & Requests):")
         conn_l = sqlite3.connect(DB_NAME)
         logs_df = pd.read_sql_query("SELECT * FROM wallet_logs WHERE vendor_id = ? ORDER BY created_at DESC", conn_l, params=(v_select,))
         conn_l.close()
@@ -426,94 +512,95 @@ elif menu == "💳 Vendor Wallet & Refund/Withdrawal":
 # -----------------------------------------------------------
 elif menu == "📦 Add Product / Listing":
     st.subheader("📦 Add New Product to Store")
-    
     conn = sqlite3.connect(DB_NAME)
     vendors_df = pd.read_sql_query("SELECT * FROM vendors", conn)
     conn.close()
 
     with st.form("prod_form"):
-        s_id = st.selectbox(
-            "Select Store", vendors_df["id"].tolist(),
-            format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0]
-        )
+        s_id = st.selectbox("Select Store", vendors_df["id"].tolist(), format_func=lambda x: vendors_df[vendors_df["id"] == x]["name"].values[0])
         c_p1, c_p2 = st.columns(2)
         with c_p1:
-            b_name = st.text_input("Brand / Item Group", placeholder="e.g. Mamta Cloth, Tata")
-            p_name = st.text_input("Product Name", placeholder="e.g. Cotton Shirt, Tea 250g")
-            p_cat = st.selectbox("Category", ["Fashion", "Grocery", "Daily Essentials", "Electronics"])
+            b_name = st.text_input("Brand", placeholder="e.g. Mamta Cloth")
+            p_name = st.text_input("Product Name", placeholder="e.g. Cotton Shirt")
+            p_cat = st.selectbox("Category", ["Fashion", "Grocery", "Daily Essentials"])
         with c_p2:
-            p_val = st.number_input("Selling Price (Rs)", min_value=10.0, max_value=500000.0, value=1000.0, step=50.0)
-            img_link = st.text_input("Product Image URL", placeholder="https://example.com/item.jpg")
+            p_val = st.number_input("Selling Price (Rs)", min_value=10.0, value=1000.0, step=50.0)
+            img_link = st.text_input("Image URL")
             p_desc = st.text_area("Product Details")
 
         if st.form_submit_button("🚀 Publish Product"):
             if b_name and p_name:
                 conn_i = sqlite3.connect(DB_NAME)
-                conn_i.execute('''
-                    INSERT INTO products (vendor_id, brand, title, category, price, is_high_value, advance_booking_amount, video_url, image_url, description)
-                    VALUES (?, ?, ?, ?, ?, 0, 0.0, '', ?, ?)
-                ''', (s_id, b_name, p_name, p_cat, p_val, img_link, p_desc))
+                conn_i.execute("INSERT INTO products (vendor_id, brand, title, category, price, image_url, description) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                               (s_id, b_name, p_name, p_cat, p_val, img_link, p_desc))
                 conn_i.commit()
                 conn_i.close()
-                st.success(f"✅ '{b_name} - {p_name}' published successfully!")
+                st.success("✅ Product published successfully!")
                 st.rerun()
 
 # -----------------------------------------------------------
-# TAB 5: REGISTER NEW STORE (100% FREE LIFETIME LISTING)
+# TAB 5: REGISTER NEW STORE
 # -----------------------------------------------------------
 elif menu == "🏬 Register New Store (Free)":
     st.subheader("🏬 Free Merchant Onboarding")
-
     with st.form("shop_form"):
         s_c1, s_c2 = st.columns(2)
         with s_c1:
-            name = st.text_input("Store Name", placeholder="e.g. Mamta General & Cloth Store")
-            phone = st.text_input("WhatsApp Phone (with 91)", value="919876543210")
-            upi = st.text_input("Store Direct UPI ID (for Customer Payments)", placeholder="e.g. mamtastore@okaxis / 9876543210@paytm")
+            name = st.text_input("Store Name")
+            phone = st.text_input("WhatsApp Phone")
+            upi = st.text_input("Store Direct UPI ID")
             city = st.text_input("City", value="Nagpur")
-            address = st.text_input("Store Full Address")
         with s_c2:
             lat = st.number_input("GPS Latitude", value=21.1450, format="%.4f")
             lon = st.number_input("GPS Longitude", value=79.0800, format="%.4f")
-            b1 = st.number_input("1 KM Delivery Fee (Rs)", value=20.0)
-            b2 = st.number_input("2 KM Delivery Fee (Rs)", value=30.0)
-            pe = st.number_input("Extra KM Fee (Rs)", value=10.0)
 
         if st.form_submit_button("✅ Register Store (Free)"):
             if name and upi:
                 conn_r = sqlite3.connect(DB_NAME)
-                conn_r.execute('''
-                    INSERT INTO vendors (name, phone, upi_id, gstin, rera_id, is_kyc_verified, is_sponsored, city, address, lat, lon, wallet_balance, free_delivery_above_500, base_1km, base_2km, per_km_extra)
-                    VALUES (?, ?, ?, 'NON-GST', 'N/A', 1, 0, ?, ?, ?, ?, 0.0, 1, ?, ?, ?)
-                ''', (name, phone, upi, city, address, lat, lon, b1, b2, pe))
+                conn_r.execute("INSERT INTO vendors (name, phone, upi_id, city, lat, lon, wallet_balance) VALUES (?, ?, ?, ?, ?, ?, 0.0)", (name, phone, upi, city, lat, lon))
                 conn_r.commit()
                 conn_r.close()
-                st.success(f"🎉 Store '{name}' registered successfully with Rs 0.00 balance! Recharge wallet to activate.")
-            else:
-                st.error("Store Name and Direct UPI ID are compulsory.")
+                st.success(f"🎉 Store '{name}' registered! Recharge wallet to activate.")
 
 # -----------------------------------------------------------
-# TAB 6: PLATFORM EARNINGS LEDGER
+# TAB 6: PLATFORM EARNINGS LEDGER & ADMIN APPROVALS
 # -----------------------------------------------------------
 else:
-    st.subheader("📊 Platform 1% Pure Commission Revenue")
+    st.subheader("📊 Platform Admin Panel: 1% Earnings & Withdrawals")
+    
     conn = sqlite3.connect(DB_NAME)
     orders_df = pd.read_sql_query("SELECT * FROM orders ORDER BY created_at DESC", conn)
+    pending_withdrawals = pd.read_sql_query("SELECT * FROM wallet_logs WHERE status = 'Pending Admin Approval'", conn)
     conn.close()
 
-    total_gross = orders_df["item_price"].sum() if not orders_df.empty else 0.0
     total_comm = orders_df["platform_commission_1pct"].sum() if not orders_df.empty else 0.0
 
     m1, m2 = st.columns(2)
-    m1.metric("Total Platform GMV", f"Rs {total_gross:,.2f}")
-    m2.metric("Total 1% Pure Commission Earned", f"Rs {total_comm:,.2f}", delta="Auto-Debited on Sales")
+    m1.metric("Total 1% Pure Commission Earned", f"Rs {total_comm:,.2f}", delta="Auto-Debited on Sales")
+    m2.metric("Pending Withdrawal Requests", len(pending_withdrawals))
 
     st.markdown("---")
-    st.write("### 📜 Real-Time Sales & Commission Deductions:")
-    if not orders_df.empty:
-        st.dataframe(orders_df[[
-            "id", "customer_name", "items_summary", "item_price", "grand_total",
-            "platform_commission_1pct", "status", "created_at"
-        ]], use_container_width=True)
-    else:
-        st.info("No orders placed yet.")
+    
+    an1, an2 = st.columns(2)
+    with an1:
+        st.write("### 📜 Real-Time Commission Deductions:")
+        if not orders_df.empty:
+            st.dataframe(orders_df[["id", "customer_name", "grand_total", "platform_commission_1pct", "created_at"]], use_container_width=True)
+
+    with an2:
+        st.write("### ⚡ Pending Vendor Withdrawals (To be Paid)")
+        st.caption("नोट: प्रोसेसिंग फीस पहले ही काट ली गई है। आपको बस नीचे लिखी अमाउंट पे करनी है।")
+        if not pending_withdrawals.empty:
+            for _, w_row in pending_withdrawals.iterrows():
+                with st.container(border=True):
+                    st.write(f"**Vendor ID #{w_row['vendor_id']}** requested **Rs {w_row['amount']:,.2f}**")
+                    st.info(f"Transfer details: `{w_row['txn_ref']}`")
+                    if st.button("✅ Mark Paid (Approve)", key=f"approve_{w_row['id']}"):
+                        conn_ap = sqlite3.connect(DB_NAME)
+                        conn_ap.execute("UPDATE wallet_logs SET status = 'Refund Completed' WHERE id = ?", (w_row['id'],))
+                        conn_ap.commit()
+                        conn_ap.close()
+                        st.success("✅ Withdrawal marked as Paid!")
+                        st.rerun()
+        else:
+            st.success("No pending withdrawal requests!")
